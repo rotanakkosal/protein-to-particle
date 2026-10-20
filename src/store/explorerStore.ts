@@ -7,6 +7,9 @@ import type { ProteinId } from "@/content/proteins";
 export type Level = 0 | 1 | 2 | 3 | 4;
 export const LEVEL_COUNT = 5;
 export type Mode = "beginner" | "scientific";
+export type Theme = "light" | "dark";
+/** "explore": the structure explorer · "make": how the structure was made (the lab pipeline) */
+export type Section = "explore" | "make";
 export type ParticleKind = "proton" | "neutron" | "electron";
 export type Vec3 = [number, number, number];
 
@@ -76,12 +79,17 @@ interface ExplorerState {
   atomView: "orbits" | "cloud";
   showQuarks: boolean;
   showField: boolean;
+  /** Highlight disease hotspots (KRAS: G12, G13, Q61) on Levels I and II */
+  showHotspots: boolean;
   viewCommand: ViewCommand | null;
   /** Camera-derived scale: CSS pixels per scene unit at the focus distance */
   pxPerUnit: number;
   hasInteracted: boolean;
   /** Start residue/region per protein, resolved from the real structure once it has loaded */
   proteinDefaults: Partial<Record<ProteinId, ProteinDefaults>>;
+  searchOpen: boolean;
+  theme: Theme;
+  section: Section;
 
   drillDown: (patch: Partial<Selection>, anchor?: Vec3) => void;
   setProtein: (id: ProteinId) => void;
@@ -104,9 +112,25 @@ interface ExplorerState {
   setAtomView: (v: ExplorerState["atomView"]) => void;
   setShowQuarks: (v: boolean) => void;
   setShowField: (v: boolean) => void;
+  setShowHotspots: (v: boolean) => void;
   command: (type: ViewCommand["type"]) => void;
   setPxPerUnit: (v: number) => void;
   markInteracted: () => void;
+  setSearchOpen: (open: boolean) => void;
+  setTheme: (theme: Theme) => void;
+  /** Switch between the explorer and the pipeline (the pipeline follows KRAS, PDB 4OBE) */
+  setSection: (section: Section) => void;
+  /** Open one amino acid at Level III (from search or a hotspot shortcut) */
+  jumpToResidue: (index: number, regionId: string) => void;
+  /** Restore a whole view at once, without a transition (shared links) */
+  restoreView: (patch: Partial<Pick<ExplorerState, "level" | "selection" | "mode" | "chainUnfolded" | "aminoAcidForm" | "atomView" | "showHotspots" | "section">>) => void;
+}
+
+const THEME_KEY = "protein-to-particle:theme";
+/** The inline script in the page head has already applied the saved or system theme before first paint. */
+function initialTheme(): Theme {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 }
 
 let transitionId = 0;
@@ -140,10 +164,14 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   atomView: "orbits",
   showQuarks: true,
   showField: true,
+  showHotspots: false,
   viewCommand: null,
   pxPerUnit: 10,
   hasInteracted: false,
   proteinDefaults: {},
+  searchOpen: false,
+  theme: initialTheme(),
+  section: "explore",
 
   drillDown: (patch, anchor) => {
     const { level, transition, selection } = get();
@@ -166,6 +194,7 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
       aminoAcidForm: "residue",
       atomView: "orbits",
       colorScheme: "structure",
+      showHotspots: false,
       hover: null,
       hoveredResidue: null,
     });
@@ -240,9 +269,34 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   },
   setShowQuarks: (showQuarks) => set({ showQuarks }),
   setShowField: (showField) => set({ showField }),
+  setShowHotspots: (showHotspots) => set({ showHotspots }),
   command: (type) => set({ viewCommand: { type, nonce: Date.now() + Math.random() } }),
   setPxPerUnit: (pxPerUnit) => set({ pxPerUnit }),
   markInteracted: () => {
     if (!get().hasInteracted) set({ hasInteracted: true });
+  },
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
+  setTheme: (theme) => {
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // storage can be unavailable (private mode, sandboxed previews); the theme still applies
+    }
+    set({ theme });
+  },
+  jumpToResidue: (index, regionId) => {
+    const st = get();
+    if (st.transition) return;
+    st.select({ residueIndex: index, regionId });
+    if (st.level === 2) st.command("refocus");
+    else st.goToLevel(2);
+  },
+  restoreView: (patch) => set({ ...patch, transition: null, hover: null }),
+  setSection: (section) => {
+    const st = get();
+    if (st.transition || st.section === section) return;
+    if (section === "make" && st.selection.proteinId !== "kras") st.setProtein("kras");
+    set({ section, hover: null, searchOpen: false });
   },
 }));
