@@ -49,8 +49,8 @@ export function ScalePill() {
   }
 
   return (
-    <div className="flex h-8 items-center gap-2 rounded-md bg-white/95 px-2.5 text-[11.5px] whitespace-nowrap shadow-[0_1px_3px_rgba(7,38,90,0.12)] sm:h-9 sm:px-3 sm:text-[12px]">
-      <span className="font-semibold tracking-[0.08em] text-brand">LEVEL {meta.numeral}</span>
+    <div className="flex h-8 items-center gap-2 rounded-md bg-surface/95 px-2.5 text-[11.5px] whitespace-nowrap shadow-[0_1px_3px_rgba(7,38,90,0.12)] sm:h-9 sm:px-3 sm:text-[12px]">
+      <span className="font-semibold tracking-[0.08em] text-brand-ink">LEVEL {meta.numeral}</span>
       <span className="text-faint">·</span>
       {bar ? (
         <>

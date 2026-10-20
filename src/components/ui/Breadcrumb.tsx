@@ -12,9 +12,10 @@ export function Breadcrumb() {
   const target = useExplorerStore((s) => s.transition?.to ?? null);
   const selection = useExplorerStore((s) => s.selection);
   const goToLevel = useExplorerStore((s) => s.goToLevel);
-  if (!protein) return null;
-  const labels = pathLabels(protein, getResidueMolecule(protein, selection.residueIndex), selection);
   const current = target ?? level;
+  // At Level I the path is just the protein name, which the protein switcher already shows
+  if (!protein || current === 0) return null;
+  const labels = pathLabels(protein, getResidueMolecule(protein, selection.residueIndex), selection);
 
   return (
     <nav aria-label="Location in the hierarchy" className="flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-x-0.5 gap-y-1 text-[11.5px]">
@@ -28,7 +29,7 @@ export function Breadcrumb() {
               disabled={active || target !== null}
               onClick={() => goToLevel(i as Level)}
               className={`rounded px-1 py-0.5 transition-colors ${
-                active ? "font-semibold text-ink" : "text-muted underline-offset-2 hover:bg-white/70 hover:text-brand hover:underline"
+                active ? "font-semibold text-ink" : "text-muted underline-offset-2 hover:bg-surface/70 hover:text-brand-ink hover:underline"
               }`}
               aria-current={active ? "location" : undefined}
             >

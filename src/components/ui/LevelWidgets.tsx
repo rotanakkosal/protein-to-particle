@@ -7,6 +7,8 @@ import { aaLabel } from "@/lib/structure/protein";
 import type { ResidueMolecule } from "@/lib/chem/residueMolecule";
 import { useExplorerStore } from "@/store/explorerStore";
 import { PARTICLE_COLORS, SS_COLORS } from "@/scene/shared/palette";
+import { hotspotsIn } from "@/content/proteins";
+import { ChevronRight } from "lucide-react";
 
 const Dot = ({ color, ring = false }: { color: string; ring?: boolean }) => (
   <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${ring ? "ring-1 ring-black/15" : ""}`} style={{ background: color }} />
@@ -43,8 +45,53 @@ export function StructureLegend() {
   );
 }
 
+/** Disease hotspots (KRAS G12, G13, Q61): what each change does, with a shortcut to zoom into it. */
+export function HotspotList({ protein }: { protein: ProteinModel }) {
+  const proteinId = useExplorerStore((s) => s.selection.proteinId);
+  const show = useExplorerStore((s) => s.showHotspots);
+  const mode = useExplorerStore((s) => s.mode);
+  const busy = useExplorerStore((s) => s.transition !== null);
+  const jumpToResidue = useExplorerStore((s) => s.jumpToResidue);
+  const hotspots = show ? hotspotsIn(protein, proteinId) : [];
+  if (!hotspots.length) return null;
+  return (
+    <section className="mt-3 rounded-md border border-hotspot/35 bg-hotspot/[0.06] px-2.5 py-2" aria-label="Cancer hotspots">
+      <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold tracking-[0.08em] text-hotspot uppercase">
+        <span className="h-2 w-2 rounded-full bg-hotspot" aria-hidden />
+        Cancer hotspots
+      </h3>
+      <ul className="mt-1.5 space-y-1.5">
+        {hotspots.map((h) => {
+          const r = protein.residues[h.index];
+          return (
+            <li key={h.label}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => jumpToResidue(h.index, r.regionId)}
+                className="group w-full rounded px-1 py-0.5 text-left transition-colors hover:bg-surface/70"
+                title={`Zoom into ${aaLabel(r)}`}
+              >
+                <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
+                  {h.label}
+                  <span className="font-normal text-muted">· {aaLabel(r)}</span>
+                  <ChevronRight className="ml-auto h-3.5 w-3.5 text-faint transition-transform group-hover:translate-x-0.5 group-hover:text-hotspot" aria-hidden />
+                </span>
+                <span className="block text-[11.5px] leading-snug text-body">{mode === "beginner" ? h.note.beginner : h.note.scientific}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function SequenceStrip({ protein }: { protein: ProteinModel }) {
   const selected = useExplorerStore((s) => s.selection.residueIndex);
+  const proteinId = useExplorerStore((s) => s.selection.proteinId);
+  const showHotspots = useExplorerStore((s) => s.showHotspots);
+  const hot = new Set(showHotspots ? hotspotsIn(protein, proteinId).map((h) => h.index) : []);
   const hovered = useExplorerStore((s) => s.hoveredResidue);
   const select = useExplorerStore((s) => s.select);
   const command = useExplorerStore((s) => s.command);
@@ -83,8 +130,8 @@ export function SequenceStrip({ protein }: { protein: ProteinModel }) {
               }}
               className={`flex aspect-square items-center justify-center rounded-[3px] leading-none transition-transform ${
                 isSel ? "z-10 scale-110 font-bold text-white ring-2 ring-brand" : isHov ? "scale-110 text-ink ring-1 ring-ink/40" : "text-ink/85"
-              }`}
-              style={{ background: isSel ? "#07265a" : `${AA_CLASS_INFO[cls].color}${isHov ? "" : "55"}` }}
+              } ${hot.has(i) ? "outline-2 outline-offset-1 outline-hotspot" : ""}`}
+              style={{ background: isSel ? "var(--color-brand)" : `${AA_CLASS_INFO[cls].color}${isHov ? "" : "55"}` }}
             >
               {r.one}
             </button>

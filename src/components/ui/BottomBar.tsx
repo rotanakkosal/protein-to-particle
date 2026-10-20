@@ -7,10 +7,11 @@ import { getResidueMolecule, useDataStore } from "@/store/dataStore";
 import { useExplorerStore } from "@/store/explorerStore";
 import { useShallow } from "zustand/react/shallow";
 import { aaLabel } from "@/lib/structure/protein";
+import { PROTEINS } from "@/content/proteins";
 
-function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { v: T; l: string; s?: string }[]; onChange: (v: T) => void; label: string }) {
+export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { v: T; l: string; s?: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex rounded-full border border-line bg-white/95 p-0.5 text-[11.5px] font-medium shadow-[0_1px_3px_rgba(7,38,90,0.08)]">
+    <div role="radiogroup" aria-label={label} className="flex rounded-full border border-line bg-surface/95 p-0.5 text-[11.5px] font-medium shadow-[0_1px_3px_rgba(7,38,90,0.08)]">
       {options.map((o) => (
         <button
           key={o.v}
@@ -28,14 +29,14 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
   );
 }
 
-function Toggle({ on, onChange, children }: { on: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
+export function Toggle({ on, onChange, children }: { on: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
   return (
     <button
       type="button"
       aria-pressed={on}
       onClick={() => onChange(!on)}
       className={`rounded-full border px-3 py-1 text-[11.5px] font-medium whitespace-nowrap shadow-[0_1px_3px_rgba(7,38,90,0.08)] transition-colors ${
-        on ? "border-brand bg-brand text-white" : "border-line bg-white/95 text-muted hover:text-ink"
+        on ? "border-brand bg-brand text-white" : "border-line bg-surface/95 text-muted hover:text-ink"
       }`}
     >
       {children}
@@ -60,32 +61,48 @@ export function ContextControls() {
       setShowQuarks: st.setShowQuarks,
       showField: st.showField,
       setShowField: st.setShowField,
+      showHotspots: st.showHotspots,
+      setShowHotspots: st.setShowHotspots,
+      proteinId: st.selection.proteinId,
     })),
   );
   const level = s.level;
+  const hotspots = PROTEINS[s.proteinId].hotspots?.length ? (
+    <Toggle on={s.showHotspots} onChange={s.setShowHotspots}>
+      <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-hotspot ring-1 ring-white/70" aria-hidden />
+      <span className="hidden sm:inline">Cancer hotspots</span>
+      <span className="sm:hidden">Hotspots</span>
+    </Toggle>
+  ) : null;
   if (level === 0)
     return (
-      <Segmented
-        label="Colour scheme"
-        value={s.colorScheme}
-        onChange={s.setColorScheme}
-        options={[
-          { v: "structure", l: "Colour by structure", s: "Structure" },
-          { v: "rainbow", l: "Colour by chain order", s: "N→C order" },
-        ]}
-      />
+      <div className="flex gap-1.5">
+        <Segmented
+          label="Colour scheme"
+          value={s.colorScheme}
+          onChange={s.setColorScheme}
+          options={[
+            { v: "structure", l: "Colour by structure", s: "Structure" },
+            { v: "rainbow", l: "Colour by chain order", s: "N→C order" },
+          ]}
+        />
+        {hotspots}
+      </div>
     );
   if (level === 1)
     return (
-      <Segmented
-        label="Chain layout"
-        value={s.chainUnfolded ? "unfolded" : "folded"}
-        onChange={(v) => s.setChainUnfolded(v === "unfolded")}
-        options={[
-          { v: "folded", l: "Folded" },
-          { v: "unfolded", l: "Unfold chain", s: "Unfold" },
-        ]}
-      />
+      <div className="flex gap-1.5">
+        <Segmented
+          label="Chain layout"
+          value={s.chainUnfolded ? "unfolded" : "folded"}
+          onChange={(v) => s.setChainUnfolded(v === "unfolded")}
+          options={[
+            { v: "folded", l: "Folded" },
+            { v: "unfolded", l: "Unfold chain", s: "Unfold" },
+          ]}
+        />
+        {hotspots}
+      </div>
     );
   if (level === 2)
     return (
@@ -127,7 +144,7 @@ export function ContextControls() {
   return null;
 }
 
-const stepBase =
+export const stepBase =
   "inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-[12px] font-medium whitespace-nowrap shadow-[0_1px_3px_rgba(7,38,90,0.08)] transition-colors disabled:opacity-35";
 
 /** "Back to …": returns to the parent level. */
@@ -137,7 +154,7 @@ export function PrevButton() {
   const previous = useExplorerStore((s) => s.previous);
   const label = level > 0 ? `Back to ${LEVELS[level - 1].name.toLowerCase()}` : null;
   return (
-    <button type="button" onClick={previous} disabled={!label || busy} className={`${stepBase} border-line bg-white/95 text-ink hover:border-brand hover:text-brand`} title="Previous level (←)">
+    <button type="button" onClick={previous} disabled={!label || busy} className={`${stepBase} border-line bg-surface/95 text-ink hover:border-brand hover:text-brand-ink`} title="Previous level (←)">
       <ChevronLeft className="h-3.5 w-3.5" />
       <span className="hidden sm:inline">{label ?? "Previous level"}</span>
       <span className="sm:hidden">Back</span>

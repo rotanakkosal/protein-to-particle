@@ -22,16 +22,16 @@ export function FrameChrome() {
       <span className={`${corner} -right-px -bottom-px border-r border-b`} />
 
       <div className="absolute inset-x-0 top-0 flex -translate-y-1/2 justify-center">
-        <h1 className="bg-paper px-3 text-center font-display text-[16px] leading-tight font-extrabold tracking-[-0.015em] text-brand sm:px-5 sm:text-[22px]">
+        <h1 data-label-block className="bg-paper px-3 text-center font-display text-[16px] leading-tight font-extrabold tracking-[-0.015em] text-brand-ink sm:px-5 sm:text-[22px]">
           Explore the Building Blocks of Life
         </h1>
       </div>
       <p className="absolute inset-x-0 top-[14px] hidden text-center text-[12.5px] text-muted min-[1200px]:block">
-        Discover how proteins are built, from amino acids to atoms and beyond.
+        <span data-label-block>Discover how proteins are built, from amino acids to atoms and beyond.</span>
       </p>
 
       <div className="absolute inset-x-0 bottom-0 flex translate-y-1/2 justify-center">
-        <p className="bg-paper px-3 text-center text-[10.5px] text-faint sm:text-[11px]">
+        <p data-label-block className="bg-paper px-3 text-center text-[10.5px] text-faint sm:text-[11px]">
           Models are simplified for learning, and each level notes what is simplified. Protein data: PDB {pdbId}.
         </p>
       </div>

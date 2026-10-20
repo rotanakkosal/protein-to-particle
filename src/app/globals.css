@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Dark theme: <html data-theme="dark"> (set before first paint by the inline script in layout) */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @theme {
   /* Navy-on-white identity taken from the reference poster */
   --color-paper: #f4f6f9; /* page and 3D background: cool near-white */
@@ -8,13 +11,22 @@
   --color-ink: #0f1b2d; /* strong text */
   --color-body: #2a3445; /* running text */
   --color-muted: #5d6779;
-  --color-faint: #8e97a8;
+  --color-faint: #667083; /* smallest print; still 4.5:1 on paper */
   --color-line: #d5dbe5;
-  --color-brand: #07265a; /* primary navy */
+  --color-surface: #ffffff; /* cards, buttons, chips */
+  --color-brand: #07265a; /* primary navy: buttons and active states */
   --color-brand-dark: #041a40;
+  --color-brand-ink: #07265a; /* navy text and icons */
   --color-brand-mid: #2c5aa0; /* subtitles, secondary emphasis */
   --color-brand-soft: #e2ecfa; /* light-blue chips and selections */
   --color-amber-note: #fbf3dd;
+  --color-amber-ink: #5b4512;
+  --color-amber-icon: #b7871f;
+  --color-gold-bg: #fbf3dd; /* functional-site labels */
+  --color-gold-ink: #7a5a12;
+  --color-gold-line: #e5cf8f;
+  --color-hotspot: #c8362e; /* cancer hotspot residues */
+  --color-chart: #2c5aa0; /* single-series chart line (validated against the light surface) */
 
   --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
@@ -22,6 +34,39 @@
 
 :root {
   color-scheme: light;
+  --scroll-thumb: #c9d1dd;
+  --haze-inner: rgba(250, 251, 253, 0.15);
+  --haze-outer: rgba(244, 246, 249, 0.6);
+}
+
+/* Navy-tinted dark theme: same hierarchy, lighter blues for text */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --color-paper: #0c1320;
+  --color-paper-2: #18233a;
+  --color-panel: #1b2840;
+  --color-surface: #121b2c;
+  --color-ink: #e9eef6;
+  --color-body: #c9d2df;
+  --color-muted: #a0abbd;
+  --color-faint: #8b97ab;
+  --color-line: #2b3950;
+  --color-brand: #2f62c4;
+  --color-brand-dark: #3a6fd4;
+  --color-brand-ink: #a8c5ff;
+  --color-brand-mid: #93b5ee;
+  --color-brand-soft: #1d2f50;
+  --color-amber-note: #2f2716;
+  --color-amber-ink: #f1d9a0;
+  --color-amber-icon: #e0b04a;
+  --color-gold-bg: #33290f;
+  --color-gold-ink: #f2d58c;
+  --color-gold-line: #6b5520;
+  --color-hotspot: #ff6b5e;
+  --color-chart: #4f86e8;
+  --scroll-thumb: #34435c;
+  --haze-inner: rgba(12, 19, 32, 0.15);
+  --haze-outer: rgba(12, 19, 32, 0.6);
 }
 
 html,
@@ -41,13 +86,13 @@ canvas {
 
 .thin-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #c9d1dd transparent;
+  scrollbar-color: var(--scroll-thumb) transparent;
 }
 .thin-scroll::-webkit-scrollbar {
   width: 6px;
 }
 .thin-scroll::-webkit-scrollbar-thumb {
-  background: #c9d1dd;
+  background: var(--scroll-thumb);
   border-radius: 3px;
 }
 
@@ -57,7 +102,7 @@ canvas {
   opacity: 0;
   backdrop-filter: blur(var(--haze-blur));
   -webkit-backdrop-filter: blur(var(--haze-blur));
-  background: radial-gradient(ellipse at 58% 50%, rgba(250, 251, 253, 0.15), rgba(244, 246, 249, 0.6) 70%);
+  background: radial-gradient(ellipse at 58% 50%, var(--haze-inner), var(--haze-outer) 70%);
 }
 
 @keyframes label-pop {
@@ -91,6 +136,6 @@ canvas {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-brand);
+  outline: 2px solid var(--color-brand-ink);
   outline-offset: 2px;
 }

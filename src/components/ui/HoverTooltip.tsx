@@ -27,7 +27,7 @@ export function HoverTooltip() {
     <div
       ref={ref}
       role="tooltip"
-      className={`pointer-events-none fixed top-0 left-0 z-50 max-w-[300px] rounded-md border border-line bg-white/97 px-3 py-2 shadow-[0_4px_16px_rgba(7,38,90,0.14)] transition-opacity duration-150 ${
+      className={`pointer-events-none fixed top-0 left-0 z-50 max-w-[300px] rounded-md border border-line bg-surface/97 px-3 py-2 shadow-[0_4px_16px_rgba(7,38,90,0.14)] transition-opacity duration-150 ${
         hover ? "opacity-100" : "opacity-0"
       }`}
     >
@@ -35,11 +35,11 @@ export function HoverTooltip() {
         <>
           <div className="flex items-center gap-2">
             {hover.swatch && <span className="h-2.5 w-2.5 shrink-0 rounded-full ring-1 ring-black/10" style={{ background: hover.swatch }} />}
-            <span className="font-display text-[13.5px] leading-tight font-bold text-brand">{hover.title}</span>
+            <span className="font-display text-[13.5px] leading-tight font-bold text-brand-ink">{hover.title}</span>
           </div>
           {hover.subtitle && <p className="mt-0.5 text-[11.5px] leading-snug text-muted">{hover.subtitle}</p>}
           {hover.hint && (
-            <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-brand">
+            <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-brand-ink">
               <MousePointerClick className="h-3 w-3" aria-hidden />
               {hover.hint}
             </p>

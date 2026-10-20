@@ -6,11 +6,12 @@ import { useLabelStore, type LabelTone } from "@/scene/shared/labelRegistry";
 import { sceneRefs } from "@/scene/runtime";
 
 const TONES: Record<LabelTone, string> = {
-  default: "bg-white/90 text-ink border-line",
+  default: "bg-surface/90 text-ink border-line",
   accent: "bg-brand text-white border-brand",
   muted: "bg-paper/85 text-muted border-line",
-  gold: "bg-[#FBF3DD] text-[#7A5A12] border-[#E5CF8F]",
-  strong: "bg-ink text-white border-ink",
+  gold: "bg-gold-bg text-gold-ink border-gold-line",
+  strong: "bg-ink text-white border-ink dark:bg-surface dark:text-ink dark:border-line",
+  hotspot: "bg-hotspot text-white border-hotspot font-semibold dark:text-paper",
 };
 
 /** Renders every registered 3D label and keeps it pinned to its anchor each animation frame. */
@@ -22,11 +23,33 @@ export function LabelOverlay() {
   useEffect(() => {
     let raf = 0;
     const v = new Vector3();
-    const tick = () => {
+    // Screen areas covered by the interface (elements marked data-label-block), refreshed a few times a second
+    let zones: { l: number; t: number; r: number; b: number }[] = [];
+    const sizes = new Map<HTMLDivElement, { w: number; h: number }>();
+    let lastZoneUpdate = -Infinity;
+    const updateZones = (el: HTMLDivElement) => {
+      const origin = el.getBoundingClientRect();
+      zones = [];
+      document.querySelectorAll<HTMLElement>("[data-label-block]").forEach((z) => {
+        const r = z.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return;
+        zones.push({ l: r.left - origin.left - 4, t: r.top - origin.top - 4, r: r.right - origin.left + 4, b: r.bottom - origin.top + 4 });
+      });
+      sizes.clear();
+      nodes.current.forEach((node) => {
+        const pill = node.firstElementChild as HTMLElement | null;
+        if (pill) sizes.set(node, { w: pill.offsetWidth, h: pill.offsetHeight });
+      });
+    };
+    const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       const camera = sceneRefs.controls?.camera;
       const el = layer.current;
       if (!camera || !el) return;
+      if (now - lastZoneUpdate > 250) {
+        lastZoneUpdate = now;
+        updateZones(el);
+      }
       const w = el.clientWidth;
       const h = el.clientHeight;
       const entries = useLabelStore.getState().labels;
@@ -38,7 +61,10 @@ export function LabelOverlay() {
         entry.anchor.getWorldPosition(v).project(camera);
         const x = ((v.x + 1) / 2) * w;
         const y = ((1 - v.y) / 2) * h;
-        if (v.z > 1 || v.z < -1 || x > w - navStrip) {
+        const size = sizes.get(node) ?? { w: 60, h: 20 };
+        const box = { l: x - size.w / 2, t: y - size.h / 2, r: x + size.w / 2, b: y + size.h / 2 };
+        const covered = zones.some((z) => box.l < z.r && box.r > z.l && box.t < z.b && box.b > z.t);
+        if (v.z > 1 || v.z < -1 || x > w - navStrip || covered) {
           node.style.visibility = "hidden";
           return;
         }
@@ -46,7 +72,7 @@ export function LabelOverlay() {
         node.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
       });
     };
-    tick();
+    raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
 

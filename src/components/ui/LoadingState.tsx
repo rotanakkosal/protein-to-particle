@@ -1,13 +1,25 @@
 "use client";
 
 /** Shown while the PDB structure is fetched and the 3D models are prepared. */
-export function LoadingState({ label = "Loading structure…", error, onRetry, onBack }: { label?: string; error?: string | null; onRetry?: () => void; onBack?: () => void }) {
+export function LoadingState({
+  label = "Loading structure…",
+  error,
+  onRetry,
+  onBack,
+  backLabel = "Back to Ubiquitin",
+}: {
+  label?: string;
+  error?: string | null;
+  onRetry?: () => void;
+  onBack?: () => void;
+  backLabel?: string;
+}) {
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3 text-center">
         {error ? (
           <>
-            <p className="font-display text-xl font-bold text-brand">The protein structure could not be loaded</p>
+            <p className="font-display text-xl font-bold text-brand-ink">The protein structure could not be loaded</p>
             <p className="max-w-sm text-[13px] text-muted">{error}</p>
             <div className="flex gap-2">
               {onRetry && (
@@ -16,8 +28,8 @@ export function LoadingState({ label = "Loading structure…", error, onRetry, o
                 </button>
               )}
               {onBack && (
-                <button type="button" onClick={onBack} className="rounded-full border border-line bg-white px-4 py-1.5 text-[13px] font-medium text-brand hover:border-brand">
-                  Back to Ubiquitin
+                <button type="button" onClick={onBack} className="rounded-full border border-line bg-surface px-4 py-1.5 text-[13px] font-medium text-brand-ink hover:border-brand">
+                  {backLabel}
                 </button>
               )}
             </div>

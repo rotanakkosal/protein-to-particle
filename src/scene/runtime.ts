@@ -55,7 +55,7 @@ export const sceneRefs = {
 /** Layout reserved by the HTML overlay around the 3D view (keeps the model clear of the panels). */
 export function computeViewport(width: number, height: number): Viewport {
   if (width < 768) {
-    const top = 104;
+    const top = 140; // title, section tabs, then the level pill and the view controls
     const bottom = Math.round(height * 0.36);
     const usableHeight = Math.max(160, height - top - bottom);
     return {
