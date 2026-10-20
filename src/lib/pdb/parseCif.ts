@@ -9,7 +9,7 @@ import type { PdbAtom, PdbStructure, SecondaryStructureRecord } from "./parsePdb
 const WATER = new Set(["HOH", "WAT", "DOD", "H2O"]);
 
 /** One CIF value; `null` stands for the CIF "unknown" (?) and "not applicable" (.) markers. */
-type Value = string | null;
+export type Value = string | null;
 interface Table {
   tags: string[];
   rows: Value[][];
@@ -56,8 +56,11 @@ function* tokenize(text: string): Generator<Token> {
   }
 }
 
+/** All categories of the first data block, keyed by category name ("atom_site", "cell", ...). */
+export type CifTables = Map<string, Table>;
+
 /** Reads the first data block into tables keyed by category name ("atom_site", "struct_conf", ...). */
-function readTables(text: string): Map<string, Table> {
+export function readCifTables(text: string): CifTables {
   const tables = new Map<string, Table>();
   const value = (t: Token): Value => (!t.quoted && (t.text === "?" || t.text === ".") ? null : t.text);
   const split = (tag: string) => {
@@ -123,17 +126,31 @@ function columns(table: Table | undefined) {
   };
 }
 
-const first = (tables: Map<string, Table>, category: string, tag: string): Value => {
+const first = (tables: CifTables, category: string, tag: string): Value => {
   const table = tables.get(category);
   if (!table?.rows.length) return null;
   return columns(table)(table.rows[0], tag);
 };
 
+/** First value of an item, e.g. cifValue(tables, "cell", "length_a"). */
+export const cifValue = first;
+
+/** Every row of a category as an object keyed by item name. */
+export function cifRows(tables: CifTables, category: string): Record<string, Value>[] {
+  const table = tables.get(category);
+  if (!table) return [];
+  return table.rows.map((row) => Object.fromEntries(table.tags.map((t, i) => [t, row[i] ?? null])));
+}
+
 const toInt = (v: Value) => (v === null ? Number.NaN : Number.parseInt(v, 10));
 const toFloat = (v: Value) => (v === null ? Number.NaN : Number.parseFloat(v));
 
 export function parseCif(text: string): PdbStructure {
-  const tables = readTables(text);
+  return parseCifTables(readCifTables(text));
+}
+
+/** Builds the coordinate model (same shape as the PDB-format parser) from already-read tables. */
+export function parseCifTables(tables: CifTables): PdbStructure {
 
   // header fields
   const idCode = first(tables, "entry", "id") ?? "";

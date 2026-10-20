@@ -1,6 +1,7 @@
 import { Vector3 } from "three";
 import { parsePdb, type PdbStructure, type SecondaryStructureKind } from "@/lib/pdb/parsePdb";
-import { isCif, parseCif } from "@/lib/pdb/parseCif";
+import { isCif, parseCifTables, readCifTables } from "@/lib/pdb/parseCif";
+import { parseCrystal, parseExperiment, type CrystalInfo, type ExperimentInfo } from "@/lib/pdb/experiment";
 import { AMINO_ACIDS, ONE_LETTER } from "@/content/aminoAcids";
 import { RESIDUE_TEMPLATES } from "@/lib/chem/residueTemplates";
 import { isElementSymbol, type ElementSymbol } from "@/lib/chem/elements";
@@ -77,6 +78,12 @@ export interface ProteinModel {
   /** Side-chain bonds, used for the close-up detail layer of the ribbon view */
   sideChainBonds: DetailBond[];
   ligands: Ligand[];
+  /** How the model sits relative to the deposited coordinates: model = axes · (deposited − centroid) */
+  frame: { centroid: Vector3; axes: [Vector3, Vector3, Vector3] };
+  /** Experiment record (mmCIF files only): gene, expression, crystal, diffraction, refinement */
+  experiment?: ExperimentInfo;
+  /** Unit cell, symmetry and asymmetric-unit atoms (crystal structures in mmCIF only) */
+  crystal?: CrystalInfo;
   /** Mass of the modelled chain from its sequence (kDa) */
   massKDa: number;
 }
@@ -321,6 +328,7 @@ export function buildProteinModel(structure: PdbStructure, chainId = "A", ligand
     sideChainBonds,
     ligands,
     massKDa,
+    frame: { centroid, axes: [e1, e2, e3] },
   };
 }
 
@@ -352,7 +360,13 @@ export function loadProtein(source: ProteinSource, ligandNames?: Set<string>): P
     p = (async () => {
       const text = (await fetchPdbText(source.file)) ?? (await fetchPdbText(source.remoteUrl));
       if (!text) throw new Error(`The structure file for PDB ${source.pdbId} is not available. Add ${source.file} to the public folder or check your internet connection.`);
-      return buildProteinModel(isCif(text) ? parseCif(text) : parsePdb(text), source.chainId, ligandNames);
+      if (!isCif(text)) return buildProteinModel(parsePdb(text), source.chainId, ligandNames);
+      const tables = readCifTables(text);
+      const structure = parseCifTables(tables);
+      const model = buildProteinModel(structure, source.chainId, ligandNames);
+      model.experiment = parseExperiment(tables);
+      model.crystal = parseCrystal(tables, structure) ?? undefined;
+      return model;
     })();
     p.catch(() => cache.delete(source.id));
     cache.set(source.id, p);
