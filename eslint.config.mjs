@@ -8,7 +8,7 @@ const eslintConfig = defineConfig([
   {
     // The 3D scene drives three.js objects imperatively from R3F hooks (useFrame, event handlers):
     // mutating cameras, materials and refs there is the intended pattern, not a render-time side effect.
-    files: ["src/scene/**/*.{ts,tsx}"],
+    files: ["src/scene/**/*.{ts,tsx}", "src/pipeline/**/*.{ts,tsx}"],
     rules: {
       "react-hooks/immutability": "off",
       "react-hooks/refs": "off",

@@ -13,7 +13,7 @@ interface StageInfo {
   level: Level;
 }
 
-const StageContext = createContext<StageInfo>({ role: "current", level: 0 });
+export const StageContext = createContext<StageInfo>({ role: "current", level: 0 });
 export const useStage = () => useContext(StageContext);
 
 /**
@@ -39,7 +39,7 @@ function applyFade(material: Material, fade: number) {
   material.depthWrite = ud.keepDepthWrite && (ud.forceTransparent === true || opacity > 0.55);
 }
 
-function fadeTree(root: Object3D, fade: number) {
+export function fadeTree(root: Object3D, fade: number) {
   root.traverse((obj) => {
     const m = (obj as Object3D & { material?: Material | Material[] }).material;
     if (!m) return;
