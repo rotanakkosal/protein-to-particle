@@ -328,7 +328,7 @@ export function AminoAcidLevel() {
         </SceneLabel>
       )}
       {form === "free" && leavingC && (
-        <SceneLabel position={[leavingC.x + 0.4, leavingC.y - 1.6, leavingC.z]} className="!bg-[#E6F1FC] !text-[#245a8f] !border-[#B9D7F3]" essential>
+        <SceneLabel position={[leavingC.x + 0.4, leavingC.y - 1.6, leavingC.z]} className="!bg-[#E6F1FC] !text-[#245a8f] !border-[#B9D7F3] dark:!bg-[#16304f] dark:!text-[#a9d0f5] dark:!border-[#2d5684]" essential>
           blue halo: leaves as H₂O when bonding
         </SceneLabel>
       )}

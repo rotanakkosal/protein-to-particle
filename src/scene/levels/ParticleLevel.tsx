@@ -24,7 +24,7 @@ import { useExplorerStore, type ParticleKind } from "@/store/explorerStore";
 import { particleHoverText } from "@/content/info";
 import { ELEMENTS } from "@/lib/chem/elements";
 import { setBaseOpacity, useStage } from "../StageGroup";
-import { ACCENT, PARTICLE_COLORS } from "../shared/palette";
+import { PARTICLE_COLORS, SCENE_THEME } from "../shared/palette";
 import { SceneLabel } from "../shared/SceneLabel";
 import { glowTexture, placeBetween } from "../shared/geometry";
 import { PARTICLE_LAYOUT } from "./atomLayout";
@@ -91,8 +91,8 @@ export function ParticleLevel() {
       up: new MeshPhysicalMaterial({ color: PARTICLE_COLORS.up, roughness: 0.25, clearcoat: 0.8, emissive: PARTICLE_COLORS.up, emissiveIntensity: 0.15 }),
       down: new MeshPhysicalMaterial({ color: PARTICLE_COLORS.down, roughness: 0.25, clearcoat: 0.8, emissive: PARTICLE_COLORS.down, emissiveIntensity: 0.15 }),
     };
-    const gluonMat = new MeshStandardMaterial({ color: "#5D6779", roughness: 0.5 });
-    const ringMat = new MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.4 });
+    const gluonMat = new MeshStandardMaterial({ roughness: 0.5 });
+    const ringMat = new MeshStandardMaterial({ emissiveIntensity: 0.4 });
     const glowMat = new SpriteMaterial({ map: glowTexture(), color: "#6FA0F5", transparent: true, opacity: 0.6, depthWrite: false });
     const fieldMats = {
       proton: new MeshStandardMaterial({ color: "#E36A62", roughness: 0.5, transparent: true, opacity: 0.75 }),
@@ -111,6 +111,13 @@ export function ParticleLevel() {
     },
     [res],
   );
+  const theme = useExplorerStore((s) => s.theme);
+  useEffect(() => {
+    const t = SCENE_THEME[theme];
+    res.ringMat.color.set(t.accent);
+    res.ringMat.emissive.set(t.accent);
+    res.gluonMat.color.set(t.gluon);
+  }, [res, theme]);
 
   const groups = useRef<Record<string, Group | null>>({});
   const quarkRefs = useRef<Record<string, (Group | null)[]>>({ proton: [], neutron: [] });
@@ -264,7 +271,7 @@ export function ParticleLevel() {
               <instancedMesh ref={(m) => void (shaftRefs.current.proton = m)} args={[res.shaftGeo, res.fieldMats.proton, ARROWS]} raycast={() => null} />
             </>
           )}
-          <SceneLabel position={[0, PARTICLE_LAYOUT[kind].radius + 0.55, 0]} tone={kind === "proton" ? "default" : "muted"} essential className={kind === "proton" ? "!text-[#B23A33] !font-semibold" : "!font-semibold"}>
+          <SceneLabel position={[0, PARTICLE_LAYOUT[kind].radius + 0.55, 0]} tone={kind === "proton" ? "default" : "muted"} essential className={kind === "proton" ? "!text-[#B23A33] !font-semibold dark:!text-[#FF8A80]" : "!font-semibold"}>
             charge {CHARGE_LABEL[kind]}
           </SceneLabel>
         </group>
@@ -284,7 +291,7 @@ export function ParticleLevel() {
         </mesh>
         <instancedMesh ref={(m) => void (fieldRefs.current.electron = m)} args={[res.coneGeo, res.fieldMats.electron, ARROWS]} raycast={() => null} />
         <instancedMesh ref={(m) => void (shaftRefs.current.electron = m)} args={[res.shaftGeo, res.fieldMats.electron, ARROWS]} raycast={() => null} />
-        <SceneLabel position={[0, 1.15, 0]} essential className="!text-[#1F59C4] !font-semibold">
+        <SceneLabel position={[0, 1.15, 0]} essential className="!text-[#1F59C4] !font-semibold dark:!text-[#8DB6FF]">
           charge {CHARGE_LABEL.electron}
         </SceneLabel>
       </group>

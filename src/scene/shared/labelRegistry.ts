@@ -13,7 +13,7 @@ import { create } from "zustand";
  * when many labels disappear in the same commit (e.g. at the start of a level transition).
  */
 
-export type LabelTone = "default" | "accent" | "muted" | "gold" | "strong";
+export type LabelTone = "default" | "accent" | "muted" | "gold" | "strong" | "hotspot";
 
 export interface LabelEntry {
   id: string;

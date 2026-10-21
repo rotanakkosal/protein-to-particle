@@ -20,15 +20,15 @@ import { useProteinData } from "@/store/dataStore";
 import { useExplorerStore } from "@/store/explorerStore";
 import { AA_CLASS_INFO, aminoAcid } from "@/content/aminoAcids";
 import { aaLabel } from "@/lib/structure/protein";
+import { hotspotsIn } from "@/content/proteins";
 import { setBaseOpacity, useStage } from "../StageGroup";
 import { transitionRuntime } from "../runtime";
-import { ACCENT, BG, CHAIN_LINK, PEPTIDE_BOND } from "../shared/palette";
+import { CHAIN_LINK, HOTSPOT, PEPTIDE_BOND, SCENE_THEME, sceneColors } from "../shared/palette";
 import { SceneLabel } from "../shared/SceneLabel";
 import { cylinderMatrix } from "../shared/geometry";
 import { getRibbon } from "./ProteinLevel";
 
 const BEAD_R = 1.45;
-const bg = new Color(BG);
 const white = new Color("#ffffff");
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -43,6 +43,9 @@ export function PolypeptideLevel() {
   const n = residues.length;
   const selection = useExplorerStore((s) => s.selection);
   const unfoldedTarget = useExplorerStore((s) => s.chainUnfolded);
+  const showHotspots = useExplorerStore((s) => s.showHotspots);
+  const hotspots = useMemo(() => (showHotspots ? hotspotsIn(protein, selection.proteinId) : []), [showHotspots, protein, selection.proteinId]);
+  const hotRings = useRef<(Group | null)[]>([]);
 
   const beads = useRef<InstancedMesh>(null);
   const links = useRef<InstancedMesh>(null);
@@ -57,10 +60,12 @@ export function PolypeptideLevel() {
     const beadMat = new MeshPhysicalMaterial({ roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.25, envMapIntensity: 0.8 });
     const linkMat = new MeshStandardMaterial({ color: CHAIN_LINK, roughness: 0.55 });
     const bondMat = new MeshPhysicalMaterial({ color: PEPTIDE_BOND, roughness: 0.25, metalness: 0.15, clearcoat: 0.6, emissive: PEPTIDE_BOND, emissiveIntensity: 0.12 });
-    const ringMat = new MeshStandardMaterial({ color: ACCENT, emissive: ACCENT, emissiveIntensity: 0.35, roughness: 0.4 });
+    const ringMat = new MeshStandardMaterial({ roughness: 0.4, emissiveIntensity: 0.35 });
     const ghostMat = new MeshStandardMaterial({ color: "#C5CEDB", roughness: 0.8, transparent: true, opacity: 0.16, depthWrite: false });
     ghostMat.userData.forceTransparent = true;
-    return { beadGeo, linkGeo, bondGeo, ringGeo, beadMat, linkMat, bondMat, ringMat, ghostMat };
+    const hotRingGeo = new TorusGeometry(1.95, 0.15, 10, 56);
+    const hotRingMat = new MeshStandardMaterial({ color: HOTSPOT, emissive: HOTSPOT, emissiveIntensity: 0.45, roughness: 0.4 });
+    return { beadGeo, linkGeo, bondGeo, ringGeo, beadMat, linkMat, bondMat, ringMat, ghostMat, hotRingGeo, hotRingMat };
   }, []);
   useEffect(
     () => () => {
@@ -68,6 +73,12 @@ export function PolypeptideLevel() {
     },
     [res],
   );
+
+  const theme = useExplorerStore((s) => s.theme);
+  useEffect(() => {
+    res.ringMat.color.set(SCENE_THEME[theme].accent);
+    res.ringMat.emissive.set(SCENE_THEME[theme].accent);
+  }, [res, theme]);
 
   const baseColors = useMemo(() => residues.map((r) => new Color(AA_CLASS_INFO[aminoAcid(r.resName).cls].color)), [residues]);
 
@@ -127,12 +138,12 @@ export function PolypeptideLevel() {
         s *= 1.12 * pulse + 0.25 * dim;
         c.lerp(white, 0.12 + 0.25 * dim);
       } else if (dim > 0) {
-        c.lerp(bg, 0.78 * dim);
+        c.lerp(sceneColors.bg, 0.78 * dim);
       } else if (i === hov) {
         s *= 1.28;
         c.lerp(white, 0.35);
       } else if (u < 0.01 && residues[i].regionId !== regionId) {
-        c.lerp(bg, 0.12);
+        c.lerp(sceneColors.bg, 0.12);
       }
       scales.push(s);
       tmp.m.compose(current[i], tmp.q.identity(), tmp.s.setScalar(s));
@@ -168,6 +179,12 @@ export function PolypeptideLevel() {
       ring.current.position.copy(current[sel]);
       ring.current.scale.setScalar(pulse * (role === "current" || dim > 0 ? 1 : 0.001));
     }
+    hotspots.forEach((h, k) => {
+      const g = hotRings.current[k];
+      if (!g) return;
+      g.position.copy(current[h.index]);
+      g.scale.setScalar(scales[h.index] / BEAD_R);
+    });
   });
 
   const interactive = role === "current";
@@ -215,10 +232,16 @@ export function PolypeptideLevel() {
   const peptideLayout = settledLayout === "unfolded" ? chain.unfoldedPeptide : chain.foldedPeptide;
   const sel = selection.residueIndex;
   const region = protein.regionById[selection.regionId];
+  const hotIndex = useMemo(() => new Set(hotspots.map((h) => h.index)), [hotspots]);
   const labelled = useMemo(() => {
     const set = new Set<number>();
     if (settledLayout === "unfolded") {
       for (let i = 0; i < n; i += 5) set.add(i);
+      // in the stretched chain, hotspots get their own (red) residue labels in place of nearby ones
+      for (const h of hotIndex) {
+        for (const i of [...set]) if (i !== h && Math.abs(i - h) <= 2) set.delete(i);
+        set.add(h);
+      }
     } else if (region) {
       // the two ends of the clicked region (neighbouring beads are too close to label them all)
       set.add(region.startIndex);
@@ -230,8 +253,26 @@ export function PolypeptideLevel() {
     set.delete(0);
     set.delete(n - 1);
     return [...set];
-  }, [settledLayout, region, sel, n]);
+  }, [settledLayout, region, sel, n, hotIndex]);
   const up = (p: Vector3, d = 2.6) => [p.x, p.y + d, p.z] as [number, number, number];
+  // Folded chain: hotspot names sit below their beads (the selected residue's name is above); neighbours share one label
+  const hotspotLabels = useMemo(() => {
+    const out: { text: string; position: [number, number, number] }[] = [];
+    if (settledLayout === "unfolded") return out;
+    let run: typeof hotspots = [];
+    const flush = () => {
+      if (!run.length) return;
+      const c = run.reduce((acc, h) => acc.add(layout[h.index]), new Vector3()).divideScalar(run.length);
+      out.push({ text: run.map((h) => h.label).join(" · "), position: [c.x, c.y - 4.2, c.z] });
+      run = [];
+    };
+    for (const h of [...hotspots].sort((a, b) => a.index - b.index)) {
+      if (run.length && h.index !== run[run.length - 1].index + 1) flush();
+      run.push(h);
+    }
+    flush();
+    return out;
+  }, [hotspots, layout, settledLayout]);
   const ghost = getRibbon(protein);
 
   return (
@@ -243,6 +284,16 @@ export function PolypeptideLevel() {
       <Billboard ref={ring}>
         <mesh geometry={res.ringGeo} material={res.ringMat} raycast={() => null} />
       </Billboard>
+      {hotspots.map((h, k) => (
+        <Billboard
+          key={h.label}
+          ref={(g) => {
+            hotRings.current[k] = g;
+          }}
+        >
+          <mesh geometry={res.hotRingGeo} material={res.hotRingMat} raycast={() => null} />
+        </Billboard>
+      ))}
 
       {settledLayout !== "moving" && (
         <>
@@ -250,7 +301,7 @@ export function PolypeptideLevel() {
             {aaLabel(residues[sel])}
           </SceneLabel>
           {labelled.map((i) => (
-            <SceneLabel key={i} position={up(layout[i])}>
+            <SceneLabel key={i} position={up(layout[i])} tone={hotIndex.has(i) ? "hotspot" : "default"}>
               {aaLabel(residues[i])}
             </SceneLabel>
           ))}
@@ -260,6 +311,11 @@ export function PolypeptideLevel() {
           <SceneLabel position={up(layout[n - 1], 3)} tone="muted">
             C-terminus
           </SceneLabel>
+          {hotspotLabels.map((g) => (
+            <SceneLabel key={g.text} position={g.position} tone="hotspot" essential>
+              {g.text}
+            </SceneLabel>
+          ))}
           {sel < n - 1 && !chain.gapAfter[sel] && (
             <SceneLabel position={[peptideLayout[sel].x, peptideLayout[sel].y - 1.8, peptideLayout[sel].z]} tone="gold">
               peptide bond

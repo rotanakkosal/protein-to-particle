@@ -10,11 +10,11 @@ import { ELEMENTS } from "@/lib/chem/elements";
 import { useProteinData } from "@/store/dataStore";
 import { useExplorerStore } from "@/store/explorerStore";
 import { regionHoverText } from "@/content/info";
-import { LIGAND_INFO, PROTEINS } from "@/content/proteins";
+import { hotspotsIn, LIGAND_INFO, PROTEINS } from "@/content/proteins";
 import { setBaseOpacity, useStage } from "../StageGroup";
 import { framingDistance, sceneRefs, transitionRuntime } from "../runtime";
 import { getFraming } from "../framing";
-import { BG, SS_COLORS } from "../shared/palette";
+import { HOTSPOT, sceneColors, SS_COLORS } from "../shared/palette";
 import { SceneLabel } from "../shared/SceneLabel";
 import { cylinderMatrix, placeBetween } from "../shared/geometry";
 
@@ -29,7 +29,6 @@ export function getRibbon(protein: ProteinModel): RibbonGeometry {
   return r;
 }
 
-const bgColor = new Color(BG);
 const white = new Color("#ffffff");
 
 export function residueBaseColors(protein: ProteinModel, scheme: "structure" | "rainbow"): Color[] {
@@ -45,7 +44,11 @@ export function ProteinLevel() {
   const { role } = useStage();
   const colorScheme = useExplorerStore((s) => s.colorScheme);
   const selectedRegion = useExplorerStore((s) => s.selection.regionId);
+  const proteinId = useExplorerStore((s) => s.selection.proteinId);
+  const showHotspots = useExplorerStore((s) => s.showHotspots);
+  const theme = useExplorerStore((s) => s.theme);
   const ribbon = getRibbon(protein);
+  const hotspots = useMemo(() => (showHotspots ? hotspotsIn(protein, proteinId) : []), [showHotspots, protein, proteinId]);
 
   const material = useMemo(
     () =>
@@ -61,25 +64,29 @@ export function ProteinLevel() {
   );
   useEffect(() => () => material.dispose(), [material]);
 
-  const base = useMemo(() => residueBaseColors(protein, colorScheme), [protein, colorScheme]);
+  const base = useMemo(() => {
+    const colors = residueBaseColors(protein, colorScheme);
+    for (const h of hotspots) colors[h.index].set(HOTSPOT);
+    return colors;
+  }, [protein, colorScheme, hotspots]);
   const display = useMemo(() => base.map((c) => c.clone()), [base]);
   const hoveredRegion = useRef<string | null>(null);
   const paintKey = useRef("");
 
   useFrame(() => {
     const dimming = role === "outgoing" && transitionRuntime.active ? transitionRuntime.approach : 0;
-    const key = `${colorScheme}|${hoveredRegion.current}|${dimming.toFixed(2)}|${selectedRegion}`;
+    const key = `${colorScheme}|${hotspots.length}|${hoveredRegion.current}|${dimming.toFixed(2)}|${selectedRegion}|${theme}`;
     if (key === paintKey.current) return;
     paintKey.current = key;
     protein.residues.forEach((r, i) => {
       const c = display[i].copy(base[i]);
       if (dimming > 0) {
         if (r.regionId === selectedRegion) c.lerp(white, 0.3 * dimming);
-        else c.lerp(bgColor, 0.7 * dimming);
+        else c.lerp(sceneColors.bg, 0.7 * dimming);
       } else if (hoveredRegion.current && r.regionId === hoveredRegion.current) {
         c.lerp(white, 0.38);
       } else if (hoveredRegion.current) {
-        c.lerp(bgColor, 0.12);
+        c.lerp(sceneColors.bg, 0.12);
       }
     });
     paintRibbon(ribbon, display);
@@ -100,6 +107,18 @@ export function ProteinLevel() {
     if (!hit) return;
     hoveredRegion.current = hit.region.id;
     const mode = useExplorerStore.getState().mode;
+    const spot = hotspots.find((h) => h.index === hit.residue);
+    if (spot) {
+      useExplorerStore.getState().setHover({
+        key: `hotspot:${spot.label}`,
+        title: `${aaLabel(protein.residues[spot.index])} · cancer hotspot ${spot.label}`,
+        subtitle: mode === "beginner" ? spot.note.beginner : spot.note.scientific,
+        hint: `Click to zoom into the chain near ${aaLabel(protein.residues[spot.index])}`,
+        swatch: HOTSPOT,
+      });
+      document.body.style.cursor = "pointer";
+      return;
+    }
     const text = regionHoverText(hit.region, mode, useExplorerStore.getState().selection.proteinId);
     useExplorerStore.getState().setHover({
       key: `region:${hit.region.id}`,
@@ -129,7 +148,7 @@ export function ProteinLevel() {
     document.body.style.cursor = "";
   }, []);
 
-  const proteinId = useExplorerStore((s) => s.selection.proteinId);
+  const scientific = useExplorerStore((s) => s.mode === "scientific");
   const siteLabels = useMemo(() => {
     return PROTEINS[proteinId].sites
       .map((site) => {
@@ -145,7 +164,8 @@ export function ProteinLevel() {
     const out = (v: Vector3, d = 7) => v.clone().addScaledVector(v.clone().normalize(), d).toArray();
     const strands = protein.regions.filter((r) => r.kind === "strand");
     const sheet = strands.reduce((acc, r) => acc.add(r.centroid), new Vector3()).divideScalar(Math.max(1, strands.length));
-    const helix = protein.regions.find((r) => r.kind === "helix");
+    const helices = protein.regions.filter((r) => r.kind === "helix");
+    const helix = helices[0];
     const h310 = protein.regions.find((r) => r.kind === "helix310");
     const first = protein.residues[0];
     const last = protein.residues[protein.residues.length - 1];
@@ -154,6 +174,8 @@ export function ProteinLevel() {
       c: out(last.atoms.CA, 5),
       sheet: out(sheet, 12),
       helix: helix ? out(helix.centroid, 8) : null,
+      // α1, α2, ... (the conventional names, numbered N → C) for Scientific mode
+      helices: helices.map((r) => ({ id: r.id, name: `α${r.ordinal}`, position: out(r.centroid, 8) })),
       h310: h310 ? out(h310.centroid, 6) : null,
       nLabel: aaLabel(first),
       cLabel: aaLabel(last),
@@ -167,6 +189,7 @@ export function ProteinLevel() {
       {protein.ligands.map((l) => (
         <LigandModel key={l.key} ligand={l} interactive={interactive} />
       ))}
+      {hotspots.length > 0 && <HotspotMarkers protein={protein} hotspots={hotspots} />}
       {siteLabels.map((site) => (
         <SceneLabel key={site.label} position={site.position} tone="gold">
           {site.label}
@@ -175,7 +198,13 @@ export function ProteinLevel() {
       <SceneLabel position={labels.n} tone="muted">N-terminus · {labels.nLabel}</SceneLabel>
       <SceneLabel position={labels.c} tone="muted">C-terminus · {labels.cLabel}</SceneLabel>
       <SceneLabel position={labels.sheet}>β-sheet</SceneLabel>
-      {labels.helix && <SceneLabel position={labels.helix}>α-helix</SceneLabel>}
+      {scientific && labels.helices.length > 1
+        ? labels.helices.map((h) => (
+            <SceneLabel key={h.id} position={h.position}>
+              {h.name}
+            </SceneLabel>
+          ))
+        : labels.helix && <SceneLabel position={labels.helix}>α-helix</SceneLabel>}
       {labels.h310 && <SceneLabel position={labels.h310} tone="muted">3₁₀-helix</SceneLabel>}
     </group>
   );
@@ -223,6 +252,53 @@ function SideChainDetail({ protein }: { protein: ProteinModel }) {
   });
 
   return <instancedMesh ref={ref} args={[geometry, material, count]} raycast={() => null} />;
+}
+
+/** Red beads on the Cα of each hotspot, labelled by mutation name (adjacent ones share a label). */
+function HotspotMarkers({ protein, hotspots }: { protein: ProteinModel; hotspots: ReturnType<typeof hotspotsIn> }) {
+  const res = useMemo(
+    () => ({
+      sphere: new SphereGeometry(1, 24, 16),
+      mat: new MeshPhysicalMaterial({ color: HOTSPOT, emissive: HOTSPOT, emissiveIntensity: 0.35, roughness: 0.3, clearcoat: 0.8 }),
+    }),
+    [],
+  );
+  useEffect(
+    () => () => {
+      res.sphere.dispose();
+      res.mat.dispose();
+    },
+    [res],
+  );
+  const groups = useMemo(() => {
+    const out: { text: string; position: [number, number, number] }[] = [];
+    let run: typeof hotspots = [];
+    const flush = () => {
+      if (!run.length) return;
+      const c = run.reduce((acc, h) => acc.add(protein.residues[h.index].atoms.CA), new Vector3()).divideScalar(run.length);
+      out.push({ text: run.map((h) => h.label).join(" · "), position: c.addScaledVector(c.clone().normalize(), 5.5).toArray() as [number, number, number] });
+      run = [];
+    };
+    for (const h of [...hotspots].sort((a, b) => a.index - b.index)) {
+      if (run.length && h.index !== run[run.length - 1].index + 1) flush();
+      run.push(h);
+    }
+    flush();
+    return out;
+  }, [protein, hotspots]);
+
+  return (
+    <group>
+      {hotspots.map((h) => (
+        <mesh key={h.label} geometry={res.sphere} material={res.mat} position={protein.residues[h.index].atoms.CA} scale={1.05} raycast={() => null} />
+      ))}
+      {groups.map((g) => (
+        <SceneLabel key={g.text} position={g.position} tone="hotspot" essential>
+          {g.text}
+        </SceneLabel>
+      ))}
+    </group>
+  );
 }
 
 const LIGAND_COLORS: Record<string, string> = { C: "#5E6168", N: "#3D5FD9", O: "#E0413A", P: "#E8862A", S: "#E2B93B", MG: "#4FAF5C" };

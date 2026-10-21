@@ -9,11 +9,14 @@ import { TransitionController } from "./TransitionController";
 import { StageManager } from "./StageManager";
 import { StudioLights } from "./StudioLights";
 import { FOV } from "./runtime";
-import { BG } from "./shared/palette";
+import { SCENE_THEME } from "./shared/palette";
+import { SceneThemeSync } from "./SceneThemeSync";
 
 /** The WebGL canvas: lights, camera rig, transition engine and the level stages. */
 export default function SceneCanvas() {
   const [dpr, setDpr] = useState(1.75);
+  // Initial colours for the current theme (SceneThemeSync follows later changes)
+  const [bg] = useState(() => SCENE_THEME[useExplorerStore.getState().theme].bg);
   return (
     <Canvas
       className="!absolute inset-0"
@@ -24,8 +27,9 @@ export default function SceneCanvas() {
       raycaster={{ params: { Points: { threshold: 0.12 }, Mesh: {}, Line: { threshold: 0.1 }, LOD: {}, Sprite: {} } }}
       onPointerMissed={() => useExplorerStore.getState().setHover(null)}
     >
-      <color attach="background" args={[BG]} />
-      <fog attach="fog" args={[BG, 60, 200]} />
+      <color attach="background" args={[bg]} />
+      <fog attach="fog" args={[bg, 60, 200]} />
+      <SceneThemeSync />
       <PerformanceMonitor onDecline={() => setDpr(1)} onIncline={() => setDpr(1.75)} flipflops={3} onFallback={() => setDpr(1)} />
       <AdaptiveDpr pixelated={false} />
       <StudioLights />
