@@ -13,7 +13,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import PipelineCanvas from "./PipelineCanvas";
 import { StagePanel } from "./ui/StagePanel";
 import { PipelineNav } from "./ui/PipelineNav";
-import { StageActions, StageNext, StagePrev } from "./ui/StageControls";
+import { StageNext, StagePrev, StagePrimary, StageReplay, StageViewToggles, useStageHasSteps } from "./ui/StageControls";
 import { StagePill } from "./ui/StagePill";
 import { StageWidget } from "./ui/StageWidget";
 
@@ -26,6 +26,7 @@ export default function PipelineView() {
   const load = useDataStore((s) => s.load);
   const setSection = useExplorerStore((s) => s.setSection);
   const mobile = useIsMobile();
+  const hasSteps = useStageHasSteps();
 
   const ctx: PipelineContext | null = useMemo(
     () => (protein?.experiment && currentId === "kras" ? { protein, exp: protein.experiment, crystal: protein.crystal ?? null } : null),
@@ -78,12 +79,27 @@ export default function PipelineView() {
 
           {mobile ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2">
-              <div data-label-block className="pointer-events-auto flex w-full items-center justify-between gap-1.5 px-3">
-                <StagePrev />
-                <div className="min-w-0 overflow-x-auto">
-                  <StageActions ctx={ctx} />
+              {hasSteps && (
+                <div data-label-block className="pointer-events-auto flex items-center gap-1.5 empty:hidden">
+                  <StageViewToggles />
                 </div>
-                <StageNext />
+              )}
+              {/* fixed side columns keep the main action in the same place on every stage */}
+              <div data-label-block className="pointer-events-auto grid w-full grid-cols-[2.75rem_1fr_5.75rem] items-center gap-1 px-3">
+                <StagePrev />
+                <div className="flex min-w-0 items-center justify-center gap-1">
+                  {hasSteps ? (
+                    <>
+                      <StagePrimary ctx={ctx} className="w-[min(186px,calc(100vw_-_208px))] shrink-0" />
+                      <StageReplay />
+                    </>
+                  ) : (
+                    <StageViewToggles />
+                  )}
+                </div>
+                <div className="flex justify-end">
+                  <StageNext />
+                </div>
               </div>
               <div data-label-block className="w-full px-2">
                 <StagePanel ctx={ctx} variant="sheet" widget={<StageWidget ctx={ctx} />} />
@@ -94,11 +110,26 @@ export default function PipelineView() {
               <div data-label-block className="pointer-events-none absolute top-1/2 left-6 z-20 -translate-y-[46%] sm:left-9">
                 <StagePanel ctx={ctx} variant="side" widget={<StageWidget ctx={ctx} />} />
               </div>
-              <div className="pointer-events-none absolute inset-x-0 bottom-[46px] z-20 flex flex-col items-center gap-2.5">
-                <div data-label-block className="pointer-events-auto flex items-center gap-2">
-                  <StagePrev />
-                  <StageActions ctx={ctx} />
-                  <StageNext />
+              {/* the main action keeps a fixed slot in the centre; everything else sits either side of it */}
+              <div className="pointer-events-none absolute inset-x-0 bottom-[46px] z-20 flex justify-center px-4">
+                <div className="grid w-full max-w-[1040px] grid-cols-[1fr_auto_1fr] items-center gap-2">
+                  <div data-label-block className="pointer-events-auto flex items-center justify-end gap-2 justify-self-end">
+                    <StagePrev />
+                    {hasSteps && <StageViewToggles />}
+                  </div>
+                  <div data-label-block className="pointer-events-auto flex justify-center">
+                    {hasSteps ? (
+                      <StagePrimary ctx={ctx} className="w-[244px]" />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <StageViewToggles />
+                      </div>
+                    )}
+                  </div>
+                  <div data-label-block className="pointer-events-auto flex items-center gap-2 justify-self-start">
+                    {hasSteps && <StageReplay />}
+                    <StageNext />
+                  </div>
                 </div>
               </div>
             </>
