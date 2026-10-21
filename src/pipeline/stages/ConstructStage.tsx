@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { Color, CylinderGeometry, InstancedMesh, Matrix4, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, SphereGeometry, Vector3 } from "three";
+import {
+  Color,
+  CylinderGeometry,
+  InstancedMesh,
+  Matrix4,
+  Mesh,
+  MeshBasicMaterial,
+  MeshPhysicalMaterial,
+  MeshStandardMaterial,
+  Quaternion,
+  SphereGeometry,
+  TorusGeometry,
+  Vector3,
+} from "three";
 import { AA_CLASS_INFO, aminoAcid } from "@/content/aminoAcids";
 import { useProteinData } from "@/store/dataStore";
 import { useExplorerStore } from "@/store/explorerStore";
@@ -10,7 +23,7 @@ import { usePipelineStore } from "@/store/pipelineStore";
 import { aaLabel } from "@/lib/structure/protein";
 import { SceneLabel } from "@/scene/shared/SceneLabel";
 import { cylinderMatrix } from "@/scene/shared/geometry";
-import { useStage } from "@/scene/StageGroup";
+import { setBaseOpacity, useStage } from "@/scene/StageGroup";
 import { framing, stageDelta } from "../runtime";
 
 /**
@@ -32,6 +45,20 @@ const ROW = 2.7;
 /** Tag colours kept apart from the side-chain class colours used for KRAS itself */
 export const TAG_COLORS: Record<TagKind, string> = { start: "#8E97A8", his: "#16C35B", tev: "#D35BB4", gly0: "#F2C230" };
 const TAIL_COLOR = "#B4BDCB";
+/*
+ * "Trim and tag", in two acts: the chain is cut after Lys169 and the tail drifts off; then KRAS
+ * makes room and the tag beads click on at the N-terminus one by one, Gly0 first and the start
+ * Met last (seconds).
+ */
+const CUT = { at: 0.25, flash: 0.5, drift: [0.6, 1.0] };
+const SHIFT = [1.6, 1.0];
+const ATTACH = { start: 2.7, each: 0.14, fly: 0.45 };
+const T_END = ATTACH.start + (TAG.length - 1) * ATTACH.each + ATTACH.fly + 0.1;
+const smooth = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
+  return t * t * (3 - 2 * t);
+};
+type Act = "full" | "cut" | "tag" | "done";
 
 /** Point along the serpentine path at (fractional) chain index t; negative t lies before the start. */
 function snake(t: number, rows: number, out: Vector3) {
@@ -60,7 +87,9 @@ export function ConstructStage() {
   const target = usePipelineStore((s) => s.steps.construct);
   const beads = useRef<InstancedMesh>(null);
   const links = useRef<InstancedMesh>(null);
-  const u = useRef(target);
+  const time = useRef(target ? T_END : 0);
+  const [act, setAct] = useState<Act>(target ? "done" : "full");
+  const flash = useRef<Mesh>(null);
   const tmp = useMemo(() => ({ m: new Matrix4(), c: new Color(), q: new Quaternion(), s: new Vector3() }), []);
 
   const list = useMemo<Bead[]>(() => {
@@ -96,60 +125,100 @@ export function ConstructStage() {
     return out;
   }, [protein]);
 
-  const res = useMemo(
-    () => ({
+  const res = useMemo(() => {
+    const ring = new TorusGeometry(1, 0.08, 8, 40);
+    const ringMat = new MeshBasicMaterial({ color: "#E0544C", transparent: true, opacity: 0, depthWrite: false, toneMapped: false });
+    ringMat.userData.forceTransparent = true;
+    ringMat.userData.ownFade = true;
+    return {
       sphere: new SphereGeometry(1, 20, 14),
       mat: new MeshPhysicalMaterial({ roughness: 0.32, clearcoat: 0.6 }),
       link: new CylinderGeometry(1, 1, 1, 8),
       linkMat: new MeshStandardMaterial({ color: "#BAC3D1", roughness: 0.6 }),
-    }),
-    [],
-  );
+      ring,
+      ringMat,
+    };
+  }, []);
   useEffect(() => () => Object.values(res).forEach((r) => r.dispose()), [res]);
 
   const rowsFull = Math.ceil(FULL_LENGTH / PER_ROW);
   const rowsConstruct = Math.ceil((TAG.length + protein.residues.length) / PER_ROW);
   const rows = Math.max(rowsFull, rowsConstruct);
 
+  const lastIndex = protein.residues.length - 1; // Lys169: the last bead kept
   useFrame((_, delta) => {
     const m = beads.current;
     const l = links.current;
     if (!m || !l) return;
     const goal = usePipelineStore.getState().steps.construct;
     delta = stageDelta(delta);
-    u.current += Math.sign(goal - u.current) * Math.min(Math.abs(goal - u.current), delta / 1.8);
-    const e = u.current < 0.5 ? 4 * u.current ** 3 : 1 - (-2 * u.current + 2) ** 3 / 2;
+    // forward at normal speed; a replay rewinds quickly
+    time.current = goal ? Math.min(T_END, time.current + delta) : Math.max(0, time.current - delta * 4);
+    const t = time.current;
+    const nextAct: Act = t <= 0 ? "full" : t < SHIFT[0] ? "cut" : t < T_END ? "tag" : "done";
+    if (nextAct !== act) setAct(nextAct);
+
+    const cut = t >= CUT.at;
+    const drift = smooth((t - CUT.drift[0]) / CUT.drift[1]);
+    const shift = smooth((t - SHIFT[0]) / SHIFT[1]);
     const pos: (Vector3 | null)[] = [];
+    const attached: boolean[] = [];
     list.forEach((b, i) => {
       let scale = 0.62;
       const p = new Vector3();
+      let done = true;
       if (b.kind === "tail") {
+        // the cut-off tail slides down and away, then fades
         snake(b.from, rows, p);
-        p.y -= e * 3.5;
-        scale *= 1 - e;
+        p.y -= drift * 3.2;
+        p.x += drift * 1.2;
+        scale *= 1 - smooth((t - 1.0) / 0.8);
       } else if (b.from < 0) {
-        snake(b.from + (b.to - b.from) * e, rows, p);
-        scale *= e;
+        // tag bead i clicks on in reverse order: Gly0 (next to Met1) first, the start Met last
+        const order = TAG.length - 1 - b.to;
+        const f = smooth((t - ATTACH.start - order * ATTACH.each) / ATTACH.fly);
+        const slot = snake(b.to, rows, new Vector3());
+        p.copy(slot).add(tmp.s.set(-2.2 - order * 0.15, 3.6, 1.5).multiplyScalar(1 - f));
+        scale *= f > 0 ? 0.35 + 0.65 * f : 0;
+        done = f > 0.97;
       } else {
-        snake(b.from + (b.to - b.from) * e, rows, p);
+        snake(b.from + (b.to - b.from) * shift, rows, p);
       }
       if (b.kind === "gly0") scale *= 1.25;
       pos.push(scale > 0.02 ? p : null);
+      attached.push(done);
       m.setMatrixAt(i, tmp.m.compose(p, tmp.q, tmp.s.setScalar(Math.max(scale, 0.0001))));
       m.setColorAt(i, tmp.c.set(b.color));
     });
     m.instanceMatrix.needsUpdate = true;
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
     m.computeBoundingSphere();
-    // backbone links between neighbours that are both present
+    // backbone links between neighbours that are both present; the 169–170 bond is broken by the cut
     for (let i = 0; i < list.length - 1; i++) {
       const a = pos[i];
       const b = pos[i + 1];
-      // no link from the end of KRAS to the detaching tail, nor across from the tail to anything else
-      const joined = a && b && (list[i].kind === "tail") === (list[i + 1].kind === "tail");
+      const kindA = list[i].kind;
+      const kindB = list[i + 1].kind;
+      const sameSide = (kindA === "tail") === (kindB === "tail");
+      const cutBond = kindA !== "tail" && kindB === "tail";
+      const joined = a && b && attached[i] && attached[i + 1] && (sameSide || (cutBond && !cut));
       l.setMatrixAt(i, joined ? cylinderMatrix(a, b, 0.14, tmp.m) : tmp.m.makeScale(0, 0, 0));
     }
     l.instanceMatrix.needsUpdate = true;
+
+    // the cut: a red ring flashes on the bond between Lys169 and residue 170
+    const fl = flash.current;
+    if (fl) {
+      const k = (t - CUT.at + 0.15) / CUT.flash;
+      const on = goal > 0 && k > 0 && k < 1;
+      fl.visible = on;
+      if (on) {
+        // Lys169 and residue 170 still sit at their original places when the cut happens
+        fl.position.copy(snake(lastIndex, rows, new Vector3())).lerp(snake(lastIndex + 1, rows, new Vector3()), 0.5);
+        fl.scale.setScalar(0.4 + 1.2 * k);
+        setBaseOpacity(res.ringMat, 1 - k);
+      }
+    }
   });
 
   const interactive = role === "current";
@@ -174,7 +243,8 @@ export function ConstructStage() {
     <group>
       <instancedMesh ref={beads} args={[res.sphere, res.mat, list.length]} onPointerMove={onMove} onPointerOut={onOut} />
       <instancedMesh ref={links} frustumCulled={false} args={[res.link, res.linkMat, list.length - 1]} raycast={() => null} />
-      {target === 0 ? (
+      <mesh ref={flash} geometry={res.ring} material={res.ringMat} visible={false} raycast={() => null} />
+      {act === "full" && (
         <>
           <SceneLabel position={at(0, 1.6)} tone="accent" essential>
             Full KRAS4B · 188 amino acids
@@ -183,7 +253,18 @@ export function ConstructStage() {
             170–188 · flexible tail
           </SceneLabel>
         </>
-      ) : (
+      )}
+      {act === "cut" && (
+        <SceneLabel position={at(lastIndex + 0.5, 1.7)} essential className="!border-[#E0544C]/60 !text-[#B4352E] dark:!text-[#FF9A92]">
+          cut after Lys169
+        </SceneLabel>
+      )}
+      {act === "tag" && (
+        <SceneLabel position={at(3.5, 3.4)} essential className="!border-[#16C35B]/60 !text-[#0d7a3a] dark:!text-[#6ef0a0]">
+          His-tag joins the N-terminus
+        </SceneLabel>
+      )}
+      {act === "done" && (
         <>
           <SceneLabel position={at(3.5, 1.6)} essential className="!border-[#16C35B]/60 !text-[#0d7a3a] dark:!text-[#6ef0a0]">
             His-tag ×6
