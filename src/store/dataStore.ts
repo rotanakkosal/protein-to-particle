@@ -6,6 +6,7 @@ import { buildChainLayout, type ChainLayout } from "@/lib/structure/chainLayout"
 import { buildResidueMolecule, type ResidueMolecule } from "@/lib/chem/residueMolecule";
 import { LIGAND_INFO, PROTEINS, type ProteinId } from "@/content/proteins";
 import { useExplorerStore } from "./explorerStore";
+import { applyPendingView } from "./urlState";
 
 interface Loaded {
   protein: ProteinModel;
@@ -46,6 +47,8 @@ export const useDataStore = create<DataState>((set, get) => ({
       if (latestRequest !== id) return; // the user switched again meanwhile
       const chain = buildChainLayout(protein);
       useExplorerStore.getState().registerProteinDefaults(id, defaultsFor(id, protein));
+      // A shared link opens its view directly (before the 3D scene mounts)
+      applyPendingView(id, protein, (i) => getResidueMolecule(protein, i));
       set((s) => ({ loaded: { ...s.loaded, [id]: { protein, chain } }, currentId: id, protein, chain, status: "ready" }));
     } catch (err) {
       if (latestRequest !== id) return;

@@ -16,6 +16,13 @@ export interface SiteSpec {
   end: number;
 }
 
+export interface Hotspot {
+  seq: number;
+  resName: string;
+  /** Short mutation-style name, e.g. "G12" */
+  label: string;
+}
+
 export interface ResidueNote {
   beginner: string;
   scientific: string;
@@ -30,10 +37,14 @@ export interface ProteinEntry {
   /** Used only when the bundled copy is missing */
   remoteUrl: string;
   chainId: string;
+  /** Modelled amino acids in the bundled file, shown in the switcher before the file has loaded */
+  residueCount: number;
   /** Residue number the tour starts on (a glycine in both proteins) */
   defaultResidueSeq: number;
   /** Functional sites labelled on the Level I model */
   sites: SiteSpec[];
+  /** Disease hotspots that can be highlighted on Levels I and II (their text comes from residueNote) */
+  hotspots?: Hotspot[];
   /** Static citation; when empty the JRNL record of the file is used */
   citation?: string;
   tail: ResidueNote;
@@ -48,7 +59,7 @@ const sections = (made: string[], example: string[], why: string[]): InfoSection
   { id: "why", label: "Why it matters", body: why },
 ];
 
-const nm = (m: ProteinModel) => `about ${Math.max(1, Math.round(m.maxDimension / 10))} nm`;
+const nm = (m: ProteinModel) => `about ${(m.maxDimension / 10).toFixed(1)} nm`;
 const dataLine = (m: ProteinModel, e: ProteinEntry) => {
   const citation = e.citation ?? m.citation;
   return `PDB ${m.idCode || e.pdbId}${citation ? ` (${citation})` : ""}`;
@@ -93,6 +104,7 @@ const ubiquitin: ProteinEntry = {
   file: "pdb/1UBI.pdb",
   remoteUrl: "https://files.rcsb.org/download/1UBI.pdb",
   chainId: "A",
+  residueCount: 76,
   defaultResidueSeq: 10,
   citation: "Ramage et al., Biochem. J. 299:151, 1994",
   sites: [{ label: "Lys48 · chain-link site", start: 48, end: 48 }],
@@ -222,11 +234,18 @@ const kras: ProteinEntry = {
   file: "pdb/4OBE.cif",
   remoteUrl: "https://files.rcsb.org/download/4OBE.cif",
   chainId: "A",
+  residueCount: 169,
   defaultResidueSeq: 12,
   sites: [
     { label: "P-loop", start: 10, end: 17 },
     { label: "Switch I", start: 30, end: 38 },
     { label: "Switch II", start: 59, end: 76 },
+  ],
+  // The three classic oncogenic positions, from most to least frequently mutated
+  hotspots: [
+    { seq: 12, resName: "GLY", label: "G12" },
+    { seq: 13, resName: "GLY", label: "G13" },
+    { seq: 61, resName: "GLN", label: "Q61" },
   ],
   tail: {
     beginner: "The end of the chain in this model. In the cell, KRAS continues with a flexible tail that anchors it to the cell membrane.",
@@ -356,3 +375,13 @@ const kras: ProteinEntry = {
 
 export const PROTEINS: Record<ProteinId, ProteinEntry> = { ubiquitin, kras };
 export const PROTEIN_ORDER: ProteinId[] = ["ubiquitin", "kras"];
+
+/** Hotspots of a protein that exist in the loaded model, as residue indices with their notes. */
+export function hotspotsIn(protein: ProteinModel, id: ProteinId) {
+  const entry = PROTEINS[id];
+  return (entry.hotspots ?? []).flatMap((h) => {
+    const index = protein.residues.findIndex((r) => r.seq === h.seq && r.resName === h.resName);
+    const note = entry.residueNote(h.seq, h.resName);
+    return index >= 0 && note ? [{ ...h, index, note }] : [];
+  });
+}
