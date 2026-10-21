@@ -180,8 +180,10 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
             "Flexible tails rarely crystallize. Trimming KRAS to its compact G-domain is what made a 1.24 Å structure possible.",
           ],
         ),
-        steps: [{ action: `Trim to residues ${range}`, done: `Trimmed: the flexible tail (170–188) is left out and a tag is added in front.` }],
-        tryIt: "Trim the protein to the construct and see what is kept, added and left out.",
+        steps: [
+          { action: `Trim to residues ${range}`, done: `Cut after Lys169: the flexible tail (170–188) is left out, then the His-tag and TEV site are joined at the N-terminus.` },
+        ],
+        tryIt: "Trim the protein: watch the cut after Lys169, then the tag beads join the front of the chain.",
         note: "The tag shown is a typical design. The PDB entry records only the leftover glycine; the exact tag sequence is in the paper (Hunter et al. 2014).",
       };
 
@@ -217,12 +219,13 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
         subtitle: [exp.expression.host, exp.expression.strain].filter(Boolean).join(" · ") || "The bacterial factory",
         summary: sci
           ? `Plasmids are introduced by transformation and selected with the plasmid's antibiotic marker. ${exp.expression.strain ?? "BL21(DE3)"}, the strain recorded in 4OBE, lacks the Lon and OmpT proteases, and its chromosome carries the T7 RNA polymerase gene (prophage λDE3) under an IPTG-inducible promoter.`
-          : "The plasmid is put into E. coli bacteria. An antibiotic kills every cell that did not take up the plasmid, so only the KRAS-carrying cells grow. They divide roughly every half hour, making billions of copies.",
+          : "The plasmid is put into E. coli bacteria growing in a flask of broth on a warm shaker. A few drops of antibiotic kill every cell that did not take up the plasmid, so only the KRAS-carrying cells grow. They divide roughly every half hour, making billions of copies.",
         facts: [
           { label: "Host", value: exp.expression.host ?? "n/a", source: "4OBE" },
           { label: "Strain", value: exp.expression.strain ?? "n/a", source: "4OBE" },
           { label: "Cell size", value: "about 2 µm long", source: "known" },
           { label: "Doubling time", value: "≈ 20 to 30 min at 37 °C", source: "typical" },
+          { label: "Culture", value: "LB broth, shaken at 37 °C", source: "typical" },
         ],
         sections: sections(
           [
@@ -236,8 +239,8 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
           { action: "Add antibiotic", done: "Cells without the plasmid cannot resist the antibiotic and die." },
           { action: "Grow the culture", done: "The surviving cells divide again and again." },
         ],
-        tryIt: "Add the antibiotic, then let the culture grow.",
-        note: "Cells and plasmids are enlarged and drawn as clean shapes; a real culture holds around a billion cells per millilitre.",
+        tryIt: "Add the antibiotic to the flask and follow it down into the cells, then let the culture grow.",
+        note: "The flask and shaker are typical lab practice, not recorded in 4OBE. The zoom from flask to cells is about 10,000×; cells and plasmids are enlarged and drawn as clean shapes, and a real culture holds around a billion cells per millilitre.",
       };
 
     case "expression":
@@ -246,7 +249,7 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
         subtitle: "Gene → messenger RNA → amino-acid chain → folded KRAS",
         summary: sci
           ? "IPTG relieves lac repression, so the insert is transcribed into mRNA and translated by ribosomes (in E. coli, roughly 10 to 20 amino acids per second). The chain folds as it emerges; Ras proteins purified from bacteria usually carry GDP·Mg²⁺, as seen in 4OBE."
-          : "Adding a chemical called IPTG flips the switch. The cell copies the gene into messenger RNA, and ribosomes read it codon by codon, linking amino acids into a chain that folds into KRAS. KRAS even picks up GDP, its 'off' molecule, from inside the cell.",
+          : "Once the culture is dense, a few drops of a chemical called IPTG go into the flask and flip the switch in every cell. Inside each cell, the gene is copied into messenger RNA, and ribosomes read it codon by codon, linking amino acids into a chain that folds into KRAS. KRAS even picks up GDP, its 'off' molecule, from inside the cell.",
         facts: [
           { label: "Switch", value: "IPTG", source: "typical" },
           { label: "Chain made", value: `tag + KRAS ${range}`, source: "computed" },
@@ -261,9 +264,9 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
           ["Expression often runs overnight at a lower temperature (around 18 °C), which gives chains more time to fold properly."],
           ["One litre of culture can yield tens of milligrams of KRAS, far more than any human tissue could provide."],
         ),
-        steps: [{ action: "Add IPTG", done: "Transcription and translation start; the chain grows, folds and binds GDP·Mg²⁺." }],
-        tryIt: "Add IPTG and watch a ribosome build the chain, which then folds into KRAS.",
-        note: "Ribosome and mRNA are schematic and not to scale: a real ribosome (about 25 nm) is roughly five times wider than KRAS, here only about twice. The fold animation morphs the chain into the final 4OBE shape; it is not the real folding pathway.",
+        steps: [{ action: "Add IPTG", done: "IPTG goes into the flask; inside each cell transcription and translation start, and the chain grows, folds and binds GDP·Mg²⁺." }],
+        tryIt: "Add IPTG to the flask, then follow it into a cell and watch a ribosome build the chain, which folds into KRAS.",
+        note: "Ribosome and mRNA are schematic and not to scale: a real ribosome (about 25 nm) is roughly five times wider than KRAS, here only about twice, and a real E. coli is about 80 ribosomes long, far bigger than the outline drawn. The fold animation morphs the chain into the final 4OBE shape; it is not the real folding pathway.",
       };
 
     case "purification":
@@ -272,9 +275,10 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
         subtitle: "From bacterial soup to one pure protein",
         summary: sci
           ? `Immobilized-metal affinity chromatography (Ni-NTA) captures the His-tagged protein; imidazole competes for the Ni²⁺ sites and elutes it. TEV protease removes the tag${tagLabel ? `, leaving ${tagLabel} (recorded as an expression-tag residue in 4OBE)` : ""}, and size-exclusion chromatography gives a clean, monodisperse sample.`
-          : "KRAS now has to be separated from thousands of other bacterial proteins. The cells are broken open and the mix flows through a column of beads carrying nickel. Only the tagged KRAS sticks. After washing, KRAS is released, its tag is cut off, and a last column sorts molecules by size.",
+          : "KRAS now has to be separated from thousands of other bacterial proteins. The harvested cells, in a tube of buffer, are broken open with pulses of sound, and the mix flows through a column of beads carrying nickel. Only the tagged KRAS sticks. After washing, KRAS is released, its tag is cut off, and a last column sorts molecules by size.",
         facts: [
           { label: "Proof the tag was cut", value: tagLabel ? `only ${tagLabel} remains` : "n/a", source: "4OBE" },
+          { label: "Breaking cells", value: "sonication, on ice", source: "typical" },
           { label: "Capture", value: "nickel (Ni-NTA) beads", source: "typical" },
           { label: "Release", value: "imidazole", source: "typical" },
           { label: "Polish", value: "size exclusion", source: "typical" },
@@ -288,7 +292,7 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
           ["Crystals only grow from very pure, uniform protein; even small amounts of contaminants can stop them forming."],
         ),
         steps: [
-          { action: "Break the cells", done: "The cell walls are broken open and everything inside spills into the buffer." },
+          { action: "Break the cells", done: "Pulses of sound from the sonicator probe tear the cells open; everything inside spills into the buffer." },
           { action: "Load the nickel column", done: "His-tagged KRAS grips the nickel beads; other proteins flow through." },
           { action: "Wash", done: "A buffer with a little imidazole rinses off proteins that stuck loosely." },
           { action: "Elute with imidazole", done: "Plenty of imidazole pushes KRAS off the nickel, and it flows out." },
@@ -339,7 +343,7 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
         subtitle: exp.crystal.method ? `${titleCase(exp.crystal.method).replace("Vapor", "Vapour")} · ${kelvin(exp.crystal.temperatureK)}` : "Vapour diffusion",
         summary: sci
           ? `Hanging-drop vapour diffusion: the drop (protein plus reservoir solution) equilibrates against a reservoir with more precipitant, so water leaves the drop until the protein becomes supersaturated and nucleates. 4OBE grew in ${crystal ? shortSpaceGroup(crystal.spaceGroup) : "n/a"} with ${exp.chainsInAsu ?? "?"} molecules per asymmetric unit${pack ? `; V_M = V_cell / (Z·M) = ${Math.round(crystal!.volume).toLocaleString("en-US")} Å³ / (${pack.molecules} × ${Math.round(exp.chainWeightDa!).toLocaleString("en-US")} Da) = ${pack.vm.toFixed(2)} Å³/Da, about ${Math.round(pack.solvent)}% solvent` : ""}.`
-          : "To see atoms with X-rays you need a crystal: billions of KRAS molecules lined up in a perfect repeating pattern. A drop of protein mixed with a salty, syrupy solution hangs over a reservoir. Water slowly leaves the drop, the protein gets crowded, and crystals grow.",
+          : "To see atoms with X-rays you need a crystal: billions of KRAS molecules lined up in a perfect repeating pattern. In a plate of 96 small wells, each with a slightly different salty, syrupy solution, a drop of protein hangs over every reservoir. Water slowly leaves the drops, the protein gets crowded, and in the right conditions crystals grow.",
         facts: [
           { label: "Method", value: exp.crystal.method ? titleCase(exp.crystal.method) : "n/a", source: "4OBE" },
           { label: "Temperature", value: kelvin(exp.crystal.temperatureK), source: "4OBE" },
@@ -357,9 +361,15 @@ export function stageInfo(key: StageKey, ctx: PipelineContext, mode: Mode): Stag
           ["Hundreds of conditions are usually screened in tiny drops before one gives good crystals; the best conditions are then refined by hand."],
           ["A crystal amplifies the signal: X-rays scattered by one molecule are far too weak to detect, but billions of identical molecules in step add up to measurable spots."],
         ),
-        steps: [{ action: "Let it equilibrate", done: "Over days, water moves from the drop into the reservoir and crystals appear." }],
-        tryIt: "Let the drop equilibrate, then look inside the crystal.",
-        note: "The drop is schematic. The crystal view uses the real 4OBE unit cell and C2 symmetry, with each KRAS drawn as its backbone trace.",
+        steps: [
+          { action: "Let it equilibrate", done: "Over days, water moves from the drop into the reservoir and crystals appear." },
+          {
+            action: "Compare the drops",
+            done: "Next door, other conditions gave a clear drop (not crowded enough) or a brown precipitate (crowded too fast). Only the right condition orders the protein into crystals.",
+          },
+        ],
+        tryIt: "Zoom into one well, let it equilibrate, compare it with its neighbours, then look inside the crystal.",
+        note: "The plate, wells and drops are schematic and days are compressed into seconds. Only the crystallizing condition comes from 4OBE; the clear and precipitate wells show typical screening outcomes. The crystal view uses the real 4OBE unit cell and C2 symmetry, with each KRAS drawn as its backbone trace.",
       };
     }
 

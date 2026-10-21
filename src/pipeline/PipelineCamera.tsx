@@ -77,13 +77,13 @@ export function PipelineCamera() {
     initialised.current = true;
   }, [stage, transition]);
 
-  // view toggles and steps that change a stage's framing (drop ↔ crystal lattice, colony growth, deposit)
+  // view toggles, steps and sub-views that change a stage's framing (drop ↔ lattice, flask → cells, deposit)
   useEffect(
     () =>
       usePipelineStore.subscribe((s, prev) => {
         if (s.transition || s.stage !== prev.stage) return;
         if (s.geneView !== prev.geneView || s.crystalView !== prev.crystalView) return frame(true);
-        if (s.steps !== prev.steps && framed.current) {
+        if ((s.steps !== prev.steps || s.subViews !== prev.subViews) && framed.current) {
           const f = framingFor(s.stage);
           if (f.target.distanceTo(framed.current.target) > 1e-3 || Math.abs(f.radius - framed.current.radius) > 1e-3) frame(true);
         }

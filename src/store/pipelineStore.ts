@@ -19,7 +19,7 @@ export const STAGE_STEPS: Record<StageKey, number> = {
   expression: 1, // idle → IPTG added (transcription, translation, folding)
   purification: 6, // lyse → bind → wash → elute → cut tag → size exclusion
   storage: 4, // concentrate → aliquot → flash-freeze → store at −80 °C
-  crystal: 1, // fresh drop → grown crystals
+  crystal: 2, // plate → one well equilibrates → three outcomes side by side
   diffraction: 0,
   structure: 3, // search model placed → refined → deposited
 };
@@ -38,6 +38,11 @@ interface PipelineState {
   replays: Record<StageKey, number>;
   geneView: "chromosome" | "dna";
   crystalView: "drop" | "lattice";
+  /**
+   * Where a stage's own animation has taken the view (e.g. the flask, then inside a cell). Stages set
+   * it mid-step; their framing reads it, so the camera follows.
+   */
+  subViews: Partial<Record<StageKey, string>>;
   rotating: boolean;
   showRings: boolean;
   goTo: (stage: number) => void;
@@ -48,6 +53,7 @@ interface PipelineState {
   setStep: (key: StageKey, step: number) => void;
   replay: (key: StageKey) => void;
   set: (patch: Partial<Pick<PipelineState, "geneView" | "crystalView" | "rotating" | "showRings">>) => void;
+  setSubView: (key: StageKey, view: string) => void;
 }
 
 let transitionId = 0;
@@ -60,6 +66,7 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   replays: zeros(),
   geneView: "dna",
   crystalView: "drop",
+  subViews: {},
   rotating: true,
   showRings: true,
   goTo: (stage) => {
@@ -80,6 +87,9 @@ export const usePipelineStore = create<PipelineState>((set, get) => ({
   setStep: (key, step) => set((s) => ({ steps: { ...s.steps, [key]: Math.max(0, Math.min(STAGE_STEPS[key], step)) } })),
   replay: (key) => set((s) => ({ steps: { ...s.steps, [key]: 0 }, replays: { ...s.replays, [key]: s.replays[key] + 1 } })),
   set: (patch) => set(patch),
+  setSubView: (key, view) => {
+    if (get().subViews[key] !== view) set((s) => ({ subViews: { ...s.subViews, [key]: view } }));
+  },
 }));
 
 export const currentStageKey = () => STAGE_KEYS[usePipelineStore.getState().stage];
