@@ -1,8 +1,8 @@
 {
-  "name": "bio-structure-explorer",
+  "name": "protein-to-particle",
   "version": "0.1.0",
   "private": true,
-  "description": "Interactive 3D explorer: protein → polypeptide chain → amino acid → atom → subatomic particles",
+  "description": "Zoom from a real protein to protons, neutrons and electrons in interactive 3D",
   "engines": {
     "node": ">=20.9.0"
   },
