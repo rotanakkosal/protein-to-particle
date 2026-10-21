@@ -48,24 +48,26 @@ Structures can be in either the classic PDB format (`.pdb`) or PDBx/mmCIF (`.cif
 
 ## How it was made: from gene to structure
 
-Switch to **How it was made** (top centre) to follow KRAS (PDB 4OBE) through the ten steps that produced the structure. Each stage is its own 3D scene with lab steps you trigger (**Add IPTG**, **Load the nickel column**, **Let it equilibrate**, …), a card that explains it at Beginner or Scientific level, and a note on what is simplified. Arrow keys move between stages; the last stage opens the finished structure in the explorer.
+Switch to **How it was made** (top centre) to follow KRAS (PDB 4OBE) through the ten steps that produced the structure. Each stage is its own 3D scene with lab steps you trigger (**Add IPTG**, **Load the nickel column**, **Let it equilibrate**, …), a card that explains it at Beginner or Scientific level, and a note on what is simplified. Every stage opens on its starting object (the flask, the lysate tube, the plate), and the main action button stays in the same place from step to step. Arrow keys move between stages; the last stage opens the finished structure in the explorer.
 
 | # | Stage | What you see |
 | --- | --- | --- |
 | 1 | Gene | KRAS on chromosome 12 (12p12.1), then a to-scale B-DNA close-up of codons 10 to 21 with codons 12 (GGT) and 13 (GGC) spelled out |
-| 2 | Construct design | The 188 residues trimmed to the G-domain (1 to 169) and a His-tag plus TEV site added; Gly0, which 4OBE flags as an expression tag, stays behind |
-| 3 | Plasmid | The construct pasted into a pJExpress401 ring with promoter, origin and resistance gene |
-| 4 | E. coli | BL21(DE3) cells take up the plasmid; the antibiotic clears the cells without it; the colony grows |
-| 5 | Expression | IPTG switches the gene on; a ribosome reads the mRNA and the chain folds into the real 4OBE fold and picks up GDP·Mg²⁺ |
-| 6 | Purification | Cells broken open, nickel column (flow-through, wash, imidazole), tag cut off, size exclusion, with schematic chromatograms |
-| 7 | Storage | Concentrated, split into single-use tubes, flash-frozen in liquid nitrogen, kept at −80 °C |
-| 8 | Crystallization | A hanging drop shrinks and crystals grow; inside the crystal, the real C2 unit cell holds 8 KRAS molecules made from the 2 deposited ones by symmetry |
+| 2 | Construct design | The chain is cut after Lys169 (the flexible tail 170 to 188 drifts off), then His-tag and TEV-site beads click on at the N-terminus; Gly0, which 4OBE flags as an expression tag, stays behind |
+| 3 | Plasmid | The construct DNA waits above a pJExpress401 ring, which opens at the cloning site and closes around it |
+| 4 | E. coli | Opens on a flask of broth on a shaking incubator; antibiotic goes in, the view zooms into the BL21(DE3) cells, the cell without the plasmid dies and the rest divide |
+| 5 | Expression | IPTG is pipetted into the grown culture, then the view dives into one cell: inside its outline a ribosome reads the mRNA and the chain folds into the real 4OBE fold and picks up GDP·Mg²⁺ |
+| 6 | Purification | A sonicator probe breaks the cells open in a lysate tube; then nickel column (flow-through, wash, imidazole), tag cut off and size exclusion, with schematic chromatograms |
+| 7 | Storage | The dilute pure protein is concentrated, split into 8 single-use tubes, flash-frozen in liquid nitrogen and kept at −80 °C |
+| 8 | Crystallization | A 96-well plate; the view zooms into one hanging-drop well where the drop shrinks and crystals grow, then compares it with neighbouring wells that stayed clear or precipitated. Inside the crystal, the real C2 unit cell holds 8 KRAS molecules made from the 2 deposited ones by symmetry |
 | 9 | X-ray diffraction | The crystal turns in the beam at APS 19-ID; spots calculated from the 4OBE atoms light up on an ADSC Quantum 315 detector, with a flat detector image you can hover |
-| 10 | Solved structure | Molecular replacement places a search model, refinement settles the atoms into calculated electron density, and the model is deposited as 4OBE |
+| 10 | Solved structure | An empty map box and a misplaced search model; molecular replacement places the model, refinement settles the atoms into calculated electron density, and the model is deposited as 4OBE |
 
-| Plasmid | Expression | Purification |
+| Plasmid | Shaking flask | Inside one cell |
 | --- | --- | --- |
-| ![plasmid](docs/screenshots/pipeline-3-plasmid.jpg) | ![expression](docs/screenshots/pipeline-5-expression.jpg) | ![purification](docs/screenshots/pipeline-6-purification.jpg) |
+| ![plasmid](docs/screenshots/pipeline-3-plasmid.jpg) | ![flask](docs/screenshots/pipeline-4-flask.jpg) | ![expression](docs/screenshots/pipeline-5-expression.jpg) |
+| **Sonication and columns** | **96-well plate** | **Clear, crystals, precipitate** |
+| ![purification](docs/screenshots/pipeline-6-purification.jpg) | ![plate](docs/screenshots/pipeline-8-crystal-plate.jpg) | ![outcomes](docs/screenshots/pipeline-8-crystal-drop.jpg) |
 | **Inside the crystal** | **X-ray diffraction** | **Refined in the electron density** |
 | ![unit cell](docs/screenshots/pipeline-8-crystal-lattice.jpg) | ![diffraction](docs/screenshots/pipeline-9-diffraction.jpg) | ![refined](docs/screenshots/pipeline-10-refined.jpg) |
 
@@ -155,7 +157,7 @@ For example, `/?p=kras&l=4&r=12&a=CA` opens the α-carbon of KRAS Gly12. `/?view
 * **Bead model (II).** One bead stands for a whole residue. This simplification is stated on screen.
 * **Amino acid (III).** Heavy atoms are the crystal coordinates. X-ray structures rarely resolve hydrogens, so they are placed from residue templates (4OBE includes riding hydrogens added during refinement; these are skipped so both proteins are drawn the same way) with ideal geometry (C–H 1.09 Å, N–H 1.01 Å, O–H 0.96 Å; sp³ tetrahedral, sp² trigonal). Protonation states are for pH ≈ 7: Lys/Arg protonated, Asp/Glu deprotonated, His as the Nε2–H tautomer, a charged N-terminus and C-terminus. The free amino acid uses the neutral textbook form; the scientific text notes the zwitterion. Formulas are counted from the displayed atoms and verified against reference formulas for every residue type in ubiquitin.
 * **Atom (IV).** The Bohr-style orbits carry an on-screen warning that electrons do not travel in fixed planetary orbits. The cloud view samples Slater-type 1s/2s/2p densities (Clementi–Raimondi exponents; radial nodes omitted) and fills p orbitals by Hund's rule. The nucleus is enlarged about 10⁴×; the text states the real scale ("a 1 cm marble → an atom about 280 m across").
-* **How it was made: crystal (8).** The unit cell, space group (C 1 2 1) and symmetry operators come from the file. Each of the 8 molecules in the cell is a symmetry copy of one of the two deposited chains, moved by whole cells so its centre lies inside the box; the hover gives the operator, e.g. −x+1/2, y+1/2, −z. The Matthews coefficient computed from the cell (1.99 Å³/Da, 38% solvent) matches the file. The hanging drop is schematic and days are compressed into seconds.
+* **How it was made: crystal (8).** The unit cell, space group (C 1 2 1) and symmetry operators come from the file. Each of the 8 molecules in the cell is a symmetry copy of one of the two deposited chains, moved by whole cells so its centre lies inside the box; the hover gives the operator, e.g. −x+1/2, y+1/2, −z. The Matthews coefficient computed from the cell (1.99 Å³/Da, 38% solvent) matches the file. The plate and drops are schematic and days are compressed into seconds; only the crystallizing condition comes from 4OBE, and the clear and precipitate wells beside it show typical screening outcomes.
 * **How it was made: diffraction (9).** Spots are calculated in the browser: every reflection to the file's 1.24 Å limit is enumerated from the cell, systematic absences are removed (for C2, h + k odd), and each reciprocal-lattice point is recorded where it crosses the Ewald sphere at the recorded wavelength (0.97926 Å) as the crystal turns. Intensities are |F|², summed over all 2,738 heavy atoms and the symmetry operators with four-Gaussian form factors and each atom's B-factor; they agree with a direct brute-force sum to within a few percent. Lorentz and polarisation factors, background, noise and spot shape are left out. The detector distance (about 150 mm) is chosen so the 1.24 Å limit reaches the detector edge, and the crystal mounting is arbitrary. The crystal, loop and pin are enlarged.
 * **How it was made: solved structure (10).** The mesh is electron density calculated from the deposited atoms of the P-loop, GDP and Mg²⁺ (each atom's form factor and B-factor, contoured at 1.2 e/Å³); the first map adds 50 Å² to every B to look blurry. The search model is drawn with 4OBE's own atoms, since 4EPV is not bundled, and the refinement is schematic. R-work and R-free are the file's values.
 * **Particles (V).** Charges, masses, quark content and lifetimes are standard values. Sizes and colours are schematic, and the gluon springs are only a suggestion of the strong force.
@@ -183,11 +185,13 @@ src/
     runtime.ts                   Per-frame transition state and the debug speed
     stages/                      GeneStage, ConstructStage, PlasmidStage, CellStage, ExpressionStage,
                                  PurificationStage, StorageStage, CrystalStage, DiffractionStage,
-                                 StructureStage (+ index.tsx registry)
+                                 StructureStage (+ index.tsx registry), Flask (shaking flask
+                                 shared by stages 4 and 5)
     lib/crystalPacking.ts        Unit-cell packing, cell edges, symmetry operator text, crystal shape
     lib/diffraction.ts           Reflections, absences, Ewald crossings and |F|² (built in slices)
     lib/density.ts               Calculated electron density and its chicken-wire contour
     lib/viewFade.ts              Cross-fade between two views of a stage
+    lib/zoom.ts                  Zoom from an overview (flask) into a detail scene (the cells)
     ui/                          StagePanel, StageWidget (keys, chromatograms, thermometer,
                                  detector image), StageControls, PipelineNav, StagePill
   content/                       Educational content (separate from rendering)
