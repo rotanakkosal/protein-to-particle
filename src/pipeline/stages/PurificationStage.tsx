@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
-import { CapsuleGeometry, Color, CylinderGeometry, InstancedMesh, LatheGeometry, Matrix4, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, SphereGeometry, Vector2, Vector3 } from "three";
+import { CapsuleGeometry, Color, ConeGeometry, CylinderGeometry, Group, InstancedMesh, LatheGeometry, Matrix4, Mesh, MeshPhysicalMaterial, MeshStandardMaterial, Quaternion, SphereGeometry, TorusGeometry, Vector2, Vector3 } from "three";
 import { useExplorerStore } from "@/store/explorerStore";
 import { usePipelineStore } from "@/store/pipelineStore";
 import { SceneLabel } from "@/scene/shared/SceneLabel";
@@ -11,15 +11,23 @@ import { framing, stageDelta } from "../runtime";
 import { TAG_COLORS } from "./ConstructStage";
 
 /*
- * Purification as particles moving through glassware (not to scale): steps 1–6 are
- * lyse → load the nickel column → wash → elute with imidazole → cut the tag (TEV) → size exclusion.
+ * Purification as particles moving through glassware (not to scale). It opens on the harvested
+ * cells in buffer, in a 50 mL tube; steps 1–6 are
+ * sonicate (lyse) → load the nickel column → wash → elute with imidazole → cut the tag (TEV) → size exclusion.
  * Every particle has a resting place at the end of each step; a step animates between them.
  */
 const COL = { x: 0, r: 2.0, top: 6, bedTop: 0.6, bedBottom: -4, outlet: -6 };
 const SEC = { x: 7.2, r: 1.15, top: 3, bottom: -4.6 };
 const TUBE = new Vector3(0, -9.4, 0);
 const FINAL = new Vector3(SEC.x, -8.2, 0);
-const CLOUD = new Vector3(0, 9.6, 0);
+/** The lysate tube: cells in buffer, broken open by the sonicator probe */
+const LYSATE = new Vector3(-6.6, 5.4, 0);
+const LIQUID_TOP = 1.6; // relative to LYSATE
+const PROBE_UP = 3.6; // tip height above LYSATE when raised
+const PROBE_DOWN = -0.9;
+const SONIC = { lower: [0, 0.14], pulse: [0.16, 0.74], raise: [0.78, 0.94] }; // fractions of step 1
+const MILKY = new Color("#E7DDC6");
+const LYSED = new Color("#E9D7A4");
 const N_KRAS = 36;
 const N_HOST = 70;
 const N_STICKY = 6;
@@ -66,8 +74,9 @@ function inBed(r: () => number) {
   const rad = Math.sqrt(r()) * (COL.r - 0.45);
   return new Vector3(COL.x + Math.cos(a) * rad, COL.bedBottom + 0.4 + r() * (COL.bedTop - COL.bedBottom - 0.8), Math.sin(a) * rad * 0.6);
 }
-function inCloud(r: () => number) {
-  return CLOUD.clone().add(new Vector3((r() - 0.5) * 7, (r() - 0.5) * 3, (r() - 0.5) * 2.4));
+/** A spot inside the buffer of the lysate tube */
+function inLysate(r: () => number) {
+  return LYSATE.clone().add(new Vector3((r() - 0.5) * 1.7, -2.0 + r() * 3.3, (r() - 0.5) * 1.1));
 }
 function inTube(r: () => number, centre: Vector3) {
   return centre.clone().add(new Vector3((r() - 0.5) * 1.1, (r() - 0.3) * 1.6, (r() - 0.5) * 0.6));
@@ -75,12 +84,14 @@ function inTube(r: () => number, centre: Vector3) {
 
 function buildParticles(): Particle[] {
   const r = rng(5);
-  const down = (from: Vector3) => [new Vector3(COL.x + (r() - 0.5) * 2.4, COL.top, (r() - 0.5) * 0.8), new Vector3(COL.x + (r() - 0.5) * 2, COL.bedTop, 0), from];
+  // poured out of the lysate tube, over and down into the nickel column
+  const pour = [LYSATE.clone().add(new Vector3(0.6, 3.6, 0)), new Vector3(COL.x - 1.6, COL.top + 2.4, 0)];
+  const down = (from: Vector3) => [...pour, new Vector3(COL.x + (r() - 0.5) * 2.4, COL.top, (r() - 0.5) * 0.8), new Vector3(COL.x + (r() - 0.5) * 2, COL.bedTop, 0), from];
   const out: Particle[] = [];
   const waste = () => new Vector3(COL.x + (r() - 0.5) * 0.6, COL.outlet - 2.2, 0);
   for (let i = 0; i < N_KRAS + N_AGG; i++) {
     const agg = i >= N_KRAS;
-    const cloud = inCloud(r);
+    const cloud = inLysate(r);
     const bed = inBed(r);
     const tube = inTube(r, TUBE);
     const final = agg ? new Vector3(SEC.x + 2.4, SEC.bottom - 1.6, 0) : inTube(r, FINAL);
@@ -96,7 +107,7 @@ function buildParticles(): Particle[] {
   }
   for (let i = 0; i < N_HOST; i++) {
     const sticky = i < N_STICKY;
-    const cloud = inCloud(r);
+    const cloud = inLysate(r);
     const bed = inBed(r);
     const palette = ["#C9BC9F", "#AEB8C8", "#D7C9A8", "#B9B0C9", "#A7B9AD"];
     out.push({
@@ -113,7 +124,16 @@ function buildParticles(): Particle[] {
   return out;
 }
 
-const CELLS = [new Vector3(-2.6, 10.2, 0), new Vector3(0.4, 9.2, 0.6), new Vector3(2.8, 10.4, -0.4)];
+/** Harvested cells floating in the buffer of the lysate tube (enlarged) */
+const CELLS = [
+  [-0.45, -1.6, 0.2, 0.3],
+  [0.4, -0.9, -0.2, -0.6],
+  [-0.3, -0.1, -0.3, 1.1],
+  [0.45, 0.5, 0.25, 0.2],
+  [-0.4, 1.0, 0.1, -1.2],
+  [0.3, -2.2, -0.1, 1.6],
+  [0.0, 0.9, -0.35, 0.8],
+].map(([x, y, z, a]) => ({ at: LYSATE.clone().add(new Vector3(x, y, z)), angle: a }));
 
 export function PurificationStage() {
   const { role } = useStage();
@@ -123,6 +143,10 @@ export function PurificationStage() {
   const tags = useRef<InstancedMesh>(null);
   const cells = useRef<InstancedMesh>(null);
   const flow = useRef<InstancedMesh>(null);
+  const probe = useRef<Group>(null);
+  const ripples = useRef<InstancedMesh>(null);
+  const bubbles = useRef<InstancedMesh>(null);
+  const liquid = useRef<Mesh>(null);
   const clock = useRef({ step, t: STEP_SECONDS });
   const [shownStep, setShownStep] = useState(step);
   const tmp = useMemo(() => ({ m: new Matrix4(), q: new Quaternion(), s: new Vector3(), v: new Vector3(), c: new Color() }), []);
@@ -155,9 +179,59 @@ export function PurificationStage() {
     cell.rotateZ(Math.PI / 2);
     const cellMat = new MeshPhysicalMaterial({ color: "#78C69B", roughness: 0.4, transparent: true, opacity: 0.7, depthWrite: false });
     cellMat.userData.forceTransparent = true;
+    cell.scale(0.42, 0.42, 0.42);
     const drop = new SphereGeometry(0.11, 8, 6);
     const dropMat = new MeshStandardMaterial({ color: "#8EC5F0", emissive: "#8EC5F0", emissiveIntensity: 0.3 });
-    return { glass, glassMat, bed, bedMat, secGlass, secBed, secBedMat, tube, blob, blobMat, tag, tagMat, cell, cellMat, drop, dropMat };
+    // 50 mL conical tube and the buffer in it
+    const conical = new LatheGeometry(
+      [new Vector2(0.05, -3.2), new Vector2(1.18, -2.2), new Vector2(1.28, 3.0), new Vector2(1.36, 3.08)].map((v) => v),
+      40,
+    );
+    const buffer = new LatheGeometry([new Vector2(0.01, -3.05), new Vector2(1.1, -2.2), new Vector2(1.2, LIQUID_TOP), new Vector2(0.01, LIQUID_TOP)], 40);
+    const bufferMat = new MeshPhysicalMaterial({ color: MILKY.clone(), roughness: 0.3, transparent: true, opacity: 0.85, depthWrite: false });
+    bufferMat.userData.forceTransparent = true;
+    // sonicator: converter housing, horn and titanium probe (the probe tip sits at the group origin)
+    const housing = new CylinderGeometry(0.62, 0.62, 2.2, 28);
+    const housingMat = new MeshPhysicalMaterial({ color: "#3A4558", roughness: 0.35, metalness: 0.4, clearcoat: 0.4 });
+    const horn = new ConeGeometry(0.42, 0.9, 28);
+    const rod = new CylinderGeometry(0.12, 0.12, 3.6, 16);
+    const rodMat = new MeshPhysicalMaterial({ color: "#B9C1CC", roughness: 0.25, metalness: 0.85 });
+    const ring = new TorusGeometry(1, 0.035, 6, 40);
+    const ringMat = new MeshStandardMaterial({ color: "#FFFFFF", transparent: true, opacity: 0.7, depthWrite: false });
+    ringMat.userData.forceTransparent = true;
+    const bubble = new SphereGeometry(0.06, 8, 6);
+    const bubbleMat = new MeshPhysicalMaterial({ color: "#FFFFFF", roughness: 0.1, transparent: true, opacity: 0.75, depthWrite: false });
+    bubbleMat.userData.forceTransparent = true;
+    return {
+      glass,
+      glassMat,
+      bed,
+      bedMat,
+      secGlass,
+      secBed,
+      secBedMat,
+      tube,
+      blob,
+      blobMat,
+      tag,
+      tagMat,
+      cell,
+      cellMat,
+      drop,
+      dropMat,
+      conical,
+      buffer,
+      bufferMat,
+      housing,
+      housingMat,
+      horn,
+      rod,
+      rodMat,
+      ring,
+      ringMat,
+      bubble,
+      bubbleMat,
+    };
   }, []);
   useEffect(() => () => Object.values(res).forEach((x) => x.dispose()), [res]);
 
@@ -189,7 +263,7 @@ export function PurificationStage() {
         if (!cur) scale *= 1 - smooth((f - 0.75) / 0.25);
       } else if (cur) {
         pos = cur.clone();
-        if (!prev && s === 1) scale *= smooth(k * 1.6); // released when the cells burst
+        if (!prev && s === 1) scale *= smooth((k - SONIC.pulse[0]) / (SONIC.pulse[1] - SONIC.pulse[0])); // released as the cells burst
       } else if (prev && k < 1 && route.length < 2) {
         pos = prev.clone();
         scale *= 1 - k;
@@ -215,13 +289,70 @@ export function PurificationStage() {
     bm.computeBoundingSphere();
     tm.instanceMatrix.needsUpdate = true;
 
-    // cells before lysis
+    // sonication (step 1): the probe dips in, pulses sound into the buffer and breaks the cells
+    const sk = s === 1 ? k : s > 1 ? 1 : 0;
+    const dip = s === 1 ? Math.min(smooth((sk - SONIC.lower[0]) / (SONIC.lower[1] - SONIC.lower[0])), 1 - smooth((sk - SONIC.raise[0]) / (SONIC.raise[1] - SONIC.raise[0]))) : 0;
+    const pulsing = s === 1 && sk > SONIC.pulse[0] && sk < SONIC.pulse[1] && Math.floor(state.clock.elapsedTime * 3) % 2 === 0;
+    const lysis = s === 0 ? 0 : s === 1 ? smooth((sk - SONIC.pulse[0]) / (SONIC.pulse[1] - SONIC.pulse[0])) : 1;
+    const pr = probe.current;
+    if (pr) {
+      const jitter = pulsing ? Math.sin(state.clock.elapsedTime * 90) * 0.03 : 0;
+      pr.position.set(LYSATE.x + jitter, LYSATE.y + PROBE_UP + (PROBE_DOWN - PROBE_UP) * dip, 0);
+    }
+    const rm = ripples.current;
+    if (rm) {
+      for (let i = 0; i < 3; i++) {
+        const f = (state.clock.elapsedTime * 1.4 + i / 3) % 1;
+        const on = pulsing || (s === 1 && sk > SONIC.pulse[0] && sk < SONIC.pulse[1]) ? 1 : 0;
+        rm.setMatrixAt(
+          i,
+          tmp.m.compose(
+            tmp.v.set(LYSATE.x, LYSATE.y + PROBE_DOWN - 0.1 - f * 0.6, 0),
+            tmp.q.setFromAxisAngle(new Vector3(1, 0, 0), Math.PI / 2),
+            tmp.s.setScalar(on * (0.25 + 0.85 * f)),
+          ),
+        );
+      }
+      rm.instanceMatrix.needsUpdate = true;
+      setBaseOpacity(res.ringMat, 0.6);
+    }
+    const bb = bubbles.current;
+    if (bb) {
+      for (let i = 0; i < 18; i++) {
+        const f = (state.clock.elapsedTime * 0.7 + i * 0.137) % 1;
+        const on = s === 1 && sk > SONIC.pulse[0] && sk < SONIC.raise[1] ? 1 : 0;
+        bb.setMatrixAt(
+          i,
+          tmp.m.compose(
+            tmp.v.set(LYSATE.x + Math.sin(i * 2.3) * 0.8, LYSATE.y - 2.4 + f * (LIQUID_TOP + 2.3), Math.cos(i * 1.7) * 0.5),
+            tmp.q.identity(),
+            tmp.s.setScalar(on * (0.6 + 0.6 * Math.sin(i))),
+          ),
+        );
+      }
+      bb.instanceMatrix.needsUpdate = true;
+    }
+    // the milky cell suspension clears into lysate; once poured onto the column the tube is empty
+    res.bufferMat.color.copy(MILKY).lerp(LYSED, lysis);
+    setBaseOpacity(res.bufferMat, 0.85 - 0.35 * lysis);
+    if (liquid.current) {
+      const left = s < 2 ? 1 : s === 2 ? 1 - smooth(k / 0.5) : 0;
+      liquid.current.scale.set(1, Math.max(0.001, left), 1);
+      liquid.current.position.y = LYSATE.y - 3.05 + 3.05 * left;
+      liquid.current.visible = left > 0.01;
+    }
     const cm = cells.current;
     if (cm) {
-      const burst = s === 0 ? 0 : s === 1 ? smooth(k * 2) : 1;
-      CELLS.forEach((p, i) => cm.setMatrixAt(i, tmp.m.compose(p, tmp.q.setFromAxisAngle(new Vector3(0, 0, 1), i * 0.6 - 0.5), tmp.s.set(1 + burst * 0.4, 1 - burst, 1 - burst))));
+      CELLS.forEach((c, i) => {
+        const burst = smooth((lysis - (i / CELLS.length) * 0.5) / 0.4);
+        const wobble = Math.sin(state.clock.elapsedTime * 1.2 + i) * 0.05;
+        cm.setMatrixAt(
+          i,
+          tmp.m.compose(tmp.v.copy(c.at).setY(c.at.y + wobble), tmp.q.setFromAxisAngle(new Vector3(0, 0, 1), c.angle), tmp.s.set(1 + burst * 0.4, 1 - burst, 1 - burst)),
+        );
+      });
       cm.instanceMatrix.needsUpdate = true;
-      setBaseOpacity(res.cellMat, 0.7 * (1 - burst));
+      setBaseOpacity(res.cellMat, 0.7 * (1 - lysis));
     }
     // buffer streaming down the column during wash (blue) and elution (imidazole, purple)
     const fm = flow.current;
@@ -265,6 +396,21 @@ export function PurificationStage() {
       <mesh geometry={res.secBed} material={res.secBedMat} position={[SEC.x, (SEC.top + SEC.bottom) / 2 - 0.2, 0]} raycast={() => null} />
       <mesh geometry={res.tube} material={res.glassMat} position={TUBE} raycast={() => null} />
       <mesh geometry={res.tube} material={res.glassMat} position={FINAL} raycast={() => null} />
+      <mesh
+        geometry={res.conical}
+        material={res.glassMat}
+        position={LYSATE}
+        onPointerMove={hover("Lysate tube", "A 50 mL tube of harvested cells in buffer, kept on ice while it is sonicated.")}
+        onPointerOut={out}
+      />
+      <mesh ref={liquid} geometry={res.buffer} material={res.bufferMat} position={[LYSATE.x, LYSATE.y, 0]} raycast={() => null} />
+      <group ref={probe} position={[LYSATE.x, LYSATE.y + PROBE_UP, 0]}>
+        <mesh geometry={res.rod} material={res.rodMat} position={[0, 1.8, 0]} onPointerMove={hover("Sonicator probe", "Vibrates 20,000 times a second; short pulses of sound tear the cells open.")} onPointerOut={out} />
+        <mesh geometry={res.horn} material={res.rodMat} position={[0, 3.95, 0]} rotation={[Math.PI, 0, 0]} raycast={() => null} />
+        <mesh geometry={res.housing} material={res.housingMat} position={[0, 5.5, 0]} raycast={() => null} />
+      </group>
+      <instancedMesh ref={ripples} frustumCulled={false} args={[res.ring, res.ringMat, 3]} raycast={() => null} />
+      <instancedMesh ref={bubbles} frustumCulled={false} args={[res.bubble, res.bubbleMat, 18]} raycast={() => null} />
       <instancedMesh ref={cells} frustumCulled={false} args={[res.cell, res.cellMat, CELLS.length]} raycast={() => null} />
       <instancedMesh ref={blobs} args={[res.blob, res.blobMat, particles.length]} onPointerMove={onBlob} onPointerOut={out} />
       <instancedMesh ref={tags} frustumCulled={false} args={[res.tag, res.tagMat, particles.length]} raycast={() => null} />
@@ -277,13 +423,18 @@ export function PurificationStage() {
         size exclusion
       </SceneLabel>
       {shownStep === 0 && (
-        <SceneLabel position={L(0, 12.4)} tone="muted" essential>
-          E. coli full of KRAS
-        </SceneLabel>
+        <>
+          <SceneLabel position={L(LYSATE.x, LYSATE.y - 4.2)} essential>
+            harvested E. coli in buffer
+          </SceneLabel>
+          <SceneLabel position={L(LYSATE.x + 2.4, LYSATE.y + PROBE_UP + 2.6)} tone="muted" essential>
+            sonicator probe
+          </SceneLabel>
+        </>
       )}
       {shownStep === 1 && (
-        <SceneLabel position={L(5.4, 10.6)} essential>
-          KRAS (blue, green tag) among E. coli proteins
+        <SceneLabel position={L(LYSATE.x, LYSATE.y - 4.2)} essential>
+          lysate · KRAS (blue, green tag) among E. coli proteins
         </SceneLabel>
       )}
       {(shownStep === 2 || shownStep === 3) && (
@@ -305,4 +456,4 @@ export function PurificationStage() {
   );
 }
 
-export const purificationFraming = () => framing([3, 1.2, 0], 13.2, [0.05, 0.12, 1]);
+export const purificationFraming = () => framing([3, 2.2, 0], 13.8, [0.05, 0.12, 1]);
