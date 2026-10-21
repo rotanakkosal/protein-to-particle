@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, InstancedMesh, LineBasicMaterial, Matrix4, MeshPhysicalMaterial, Quaternion, SphereGeometry, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, Color, CylinderGeometry, EdgesGeometry, Float32BufferAttribute, InstancedMesh, LineBasicMaterial, Matrix4, MeshPhysicalMaterial, Quaternion, SphereGeometry, Vector3 } from "three";
 import { longDate } from "@/content/pipeline";
 import type { ProteinModel } from "@/lib/structure/protein";
 import { paintRibbon } from "@/lib/geometry/ribbon";
@@ -118,9 +118,11 @@ function buildSite(protein: ProteinModel) {
     return list.reduce((s, a) => s.add(a.position), new Vector3()).divideScalar(Math.max(1, list.length));
   };
   const colors = atoms.map((a) => new Color(ELEMENT_COLORS[a.element] ?? ELEMENT_COLORS.C));
+  // the box the map will fill (empty until the search model provides phases)
+  const box = new Box3().setFromPoints(atoms.map((a) => a.position)).expandByScalar(2.2);
   // looking at the site from outside the protein
   const outward = centre.clone().normalize();
-  return { atoms, centre, bonds, jitter, colors, outward, gdp: centreOf("GDP"), mg: centreOf("MG"), ploop: centreOf("ploop") };
+  return { atoms, centre, bonds, jitter, colors, outward, box, gdp: centreOf("GDP"), mg: centreOf("MG"), ploop: centreOf("ploop") };
 }
 
 export function StructureStage() {
@@ -150,8 +152,12 @@ export function StructureStage() {
     firstMat.userData.forceTransparent = true;
     const finalMat = new LineBasicMaterial({ color: "#2F72E4", transparent: true, opacity: 0, depthWrite: false });
     finalMat.userData.forceTransparent = true;
-    return { ribbon, ribbonMat, ball, ballMat, stick, stickMat, firstMat, finalMat };
-  }, [protein]);
+    const size = site.box.getSize(new Vector3());
+    const boxGeo = new EdgesGeometry(new BoxGeometry(size.x, size.y, size.z));
+    const boxMat = new LineBasicMaterial({ color: "#8E97A8", transparent: true, opacity: 0.7, depthWrite: false });
+    boxMat.userData.forceTransparent = true;
+    return { ribbon, ribbonMat, ball, ballMat, stick, stickMat, firstMat, finalMat, boxGeo, boxMat };
+  }, [protein, site]);
   useEffect(
     () => () => {
       const { ribbon, ...rest } = res;
@@ -210,6 +216,8 @@ export function StructureStage() {
     setBaseOpacity(res.firstMat, s === 1 ? smooth(k * 2 - 1) : s === 2 ? 1 - k : 0);
     setBaseOpacity(res.finalMat, s === 2 ? k : s === 3 ? 1 - 0.45 * k : 0);
     setBaseOpacity(res.ribbonMat, 0.88 * deposit);
+    // the empty map box gives way to the first map as the model is placed
+    setBaseOpacity(res.boxMat, 0.7 * (1 - place));
 
     // search model: a rigid turn and shift away from the answer, plus small per-atom errors
     tmp.q.setFromAxisAngle(SEARCH_TURN.axis, SEARCH_TURN.angle * (1 - place));
@@ -255,6 +263,7 @@ export function StructureStage() {
   return (
     <group scale={SCALE}>
       <mesh geometry={res.ribbon.geometry} material={res.ribbonMat} raycast={() => null} />
+      <lineSegments geometry={res.boxGeo} material={res.boxMat} position={site.box.getCenter(new Vector3())} raycast={() => null} />
       {maps && (
         <>
           <lineSegments geometry={maps.first} material={res.firstMat} raycast={() => null} />
@@ -275,9 +284,14 @@ export function StructureStage() {
       <instancedMesh ref={sticks} args={[res.stick, res.stickMat, Math.max(1, site.bonds.length)]} raycast={() => null} />
 
       {shownStep === 0 && (
-        <SceneLabel position={label(searchCentre.clone().add(new Vector3(0, 6, 0)))} essential>
-          search model · not yet placed
-        </SceneLabel>
+        <>
+          <SceneLabel position={label(searchCentre.clone().add(new Vector3(0, 6, 0)))} essential>
+            search model · not yet placed
+          </SceneLabel>
+          <SceneLabel position={label(new Vector3(site.box.min.x, site.box.min.y, site.box.max.z))} tone="muted" essential>
+            map · empty until phases are known
+          </SceneLabel>
+        </>
       )}
       {shownStep === 1 && done && (
         <SceneLabel position={label(site.centre.clone().add(new Vector3(0, 7.5, 0)))} essential>

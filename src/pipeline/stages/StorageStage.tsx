@@ -18,7 +18,7 @@ const DEWAR = new Vector3(4.4, -1.8, 0);
 const FREEZER = new Vector3(10.4, 0.4, 0);
 const N_TUBES = 8;
 const STEP_SECONDS = 3;
-const PALE = new Color("#CFE2FB");
+const PALE = new Color("#B4D0F6");
 const DEEP = new Color("#3F74D3");
 const FROST = new Color("#E9F2FF");
 
@@ -120,16 +120,15 @@ export function StorageStage() {
     if (!tm || !fm || !cm) return;
     for (let i = 0; i < N_TUBES; i++) {
       let pos: Vector3;
-      let show = 1;
+      const show = 1;
       let level = 1;
       if (s < 2) {
+        // empty tubes, ready for the protein
         pos = rowPos(i);
-        show = 0;
+        level = 0;
       } else if (s === 2) {
         pos = rowPos(i);
-        const ti = smooth(k * 1.4 - i * 0.05);
-        show = ti > 0 ? 1 : 0;
-        level = ti;
+        level = smooth(k * 1.4 - i * 0.05);
       } else if (s === 3) {
         pos = hop(rowPos(i), dewarPos(i), Math.min(1, Math.max(0, k * 1.25 - i * 0.03)), 3.2);
       } else {
@@ -202,7 +201,7 @@ export function StorageStage() {
         spin concentrator
       </SceneLabel>
       <SceneLabel position={[0, -3.4, 0]} essential tone={shown >= 2 ? "default" : "muted"}>
-        {shown >= 2 ? "8 single-use tubes" : "tubes (next)"}
+        {shown >= 2 ? "8 single-use tubes" : "8 empty tubes"}
       </SceneLabel>
       <SceneLabel position={[DEWAR.x, DEWAR.y - 2.8, 0]} essential>
         liquid nitrogen · −196 °C
@@ -210,6 +209,11 @@ export function StorageStage() {
       <SceneLabel position={[FREEZER.x, FREEZER.y + 3.6, 0]} essential>
         freezer · −80 °C
       </SceneLabel>
+      {shown === 0 && (
+        <SceneLabel position={[CONC.x + 3.4, -0.6, 0]} tone="accent" essential>
+          pure KRAS · still dilute
+        </SceneLabel>
+      )}
       {shown === 1 && (
         <SceneLabel position={[CONC.x + 3.2, -1.6, 0]} tone="muted" essential>
           water passes, KRAS stays

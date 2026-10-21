@@ -27,6 +27,7 @@ const R = 8;
 const TWIST = 34; // turns of the two strands around the ring
 const STRAND_R = 0.28;
 const STRAND_OFFSET = 0.32;
+const WAIT = 3.6; // how far above its place the construct DNA waits before insertion
 
 /** Parts clockwise from the top; the insert goes in at the top, between RBS and terminator. */
 function partsFor(insertLen: number, inserted: number): Part[] {
@@ -166,7 +167,7 @@ export function PlasmidStage() {
   };
 
   const last = useRef(-1);
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     const goal = usePipelineStore.getState().steps.plasmid;
     delta = stageDelta(delta);
     u.current += Math.sign(goal - u.current) * Math.min(Math.abs(goal - u.current), delta / 2.4);
@@ -177,12 +178,13 @@ export function PlasmidStage() {
       rebuild(e);
       if (e === 0 || e === 1) setSettled(e);
     }
+    // the construct DNA waits above the cloning site from the start, then drops into the open ring
     const drop = e < 0.35 ? 0 : e < 0.8 ? (e - 0.35) / 0.45 : 1;
-    const visible = e > 0.3 && e < 0.999;
+    const bob = e === 0 ? Math.sin(state.clock.elapsedTime * 1.4) * 0.15 : 0;
     for (const m of [insertA.current, insertB.current]) {
       if (!m) continue;
-      m.visible = visible;
-      m.position.set(0, 7 * (1 - drop * drop * (3 - 2 * drop)), 0);
+      m.visible = e < 0.999;
+      m.position.set(0, WAIT * (1 - drop * drop * (3 - 2 * drop)) + bob, 0);
     }
   });
 
@@ -247,9 +249,14 @@ export function PlasmidStage() {
           KRAS construct · {insertLen} bases with tag
         </SceneLabel>
       ) : (
-        <SceneLabel position={labelFor("site", -2.6)} essential>
-          cloning site
-        </SceneLabel>
+        <>
+          <SceneLabel position={labelFor("site", -2.6)} essential>
+            cloning site
+          </SceneLabel>
+          <SceneLabel position={[0, R + WAIT + 1.5, 0]} tone="gold" essential>
+            KRAS construct DNA · {insertLen} bases, ready to insert
+          </SceneLabel>
+        </>
       )}
       <SceneLabel position={labelFor("promoter", 3.4)}>promoter (switch)</SceneLabel>
       <SceneLabel position={labelFor("resistance")}>antibiotic resistance</SceneLabel>
@@ -261,4 +268,4 @@ export function PlasmidStage() {
   );
 }
 
-export const plasmidFraming = () => framing([0, 0.6, 0], 13, [0, 0.1, 1]);
+export const plasmidFraming = () => framing([0, 1.8, 0], 14, [0, 0.1, 1]);
