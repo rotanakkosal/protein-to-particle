@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
+  CapsuleGeometry,
   CatmullRomCurve3,
   Color,
   CylinderGeometry,
@@ -28,16 +29,24 @@ import { cylinderMatrix } from "@/scene/shared/geometry";
 import { getRibbon, residueBaseColors } from "@/scene/levels/ProteinLevel";
 import { setBaseOpacity } from "@/scene/StageGroup";
 import { framing, stageDelta } from "../runtime";
+import { useZoom } from "../lib/zoom";
 import { TAG_COLORS } from "./ConstructStage";
+import { BROTH_CENTRE, Flask, type FlaskState } from "./Flask";
 
 /*
- * Inside one cell, in the ribosome's frame of reference: the messenger RNA slides through a
+ * Opens on the grown culture in its flask. "Add IPTG" pipettes the inducer into the flask, then
+ * the view dives into one cell (its outline drawn around the scene). Inside, in the ribosome's frame of reference: the messenger RNA slides through a
  * fixed ribosome while the new chain leaves the exit tunnel and settles into the real 4OBE fold.
  * Timeline after "Add IPTG" (seconds): induction, transcription, translation (≈ 20 amino acids
  * per second, close to the real rate in E. coli), folding, then GDP·Mg²⁺ binding.
  */
 const T = { iptg: 1.4, tx: 1.6, tl: 9.2, fold: 1.8, bind: 1.6 };
-const T_TOTAL = T.iptg + T.tx + T.tl + T.fold + T.bind;
+const ADD = 1.8; // pipetting IPTG into the flask
+const ZOOM = 1.4; // diving into one cell
+const PRE = ADD + ZOOM;
+const T_TOTAL = PRE + T.iptg + T.tx + T.tl + T.fold + T.bind;
+/** Centre of the cell interior, where the zoom lands */
+const CELL_CENTRE = new Vector3(0, 3, 0);
 // Not to scale: a real ribosome (≈ 25 nm) is about 5× wider than KRAS (≈ 4.5 nm); here it is about 2×,
 // so the chain stays readable. The stage note says so.
 const SCALE = 0.115; // Å → scene units for the folded protein
@@ -67,13 +76,17 @@ function lumpy(radius: number, seed: number) {
   return g;
 }
 
-type Phase = "idle" | "iptg" | "tx" | "tl" | "fold" | "bind" | "done";
+type Phase = "idle" | "add" | "zoom" | "iptg" | "tx" | "tl" | "fold" | "bind" | "done";
 
 export function ExpressionStage() {
   const { protein } = useProteinData();
   const step = usePipelineStore((s) => s.steps.expression);
   const time = useRef(step ? T_TOTAL : 0);
   const [phase, setPhase] = useState<Phase>(step ? "done" : "idle");
+  const view = usePipelineStore((s) => s.subViews.expression ?? (s.steps.expression > 0 ? "cell" : "flask"));
+  const [arrived, setArrived] = useState(view === "cell");
+  const flask = useRef<FlaskState>({ turbidity: 0.85, add: 0, addColor: "#2F72E4" });
+  const zoom = useZoom(view === "cell", { outerPivot: BROTH_CENTRE, innerPivot: CELL_CENTRE, outerScale: 16, innerScale: 0.12, seconds: ZOOM });
   const beads = useRef<InstancedMesh>(null);
   const links = useRef<InstancedMesh>(null);
   const mrna = useRef<Mesh>(null);
@@ -102,6 +115,18 @@ export function ExpressionStage() {
     paintRibbon(ribbon, residueBaseColors(protein, "structure"));
     const ribbonMat = new MeshPhysicalMaterial({ vertexColors: true, roughness: 0.36, clearcoat: 0.55, transparent: true, opacity: 0 });
     ribbonMat.userData.forceTransparent = true;
+    ribbonMat.userData.ownFade = true;
+    // the cell envelope: two faint layers (outer and inner membrane) around the whole scene
+    const envelope = new CapsuleGeometry(13, 24, 12, 48);
+    envelope.rotateZ(Math.PI / 2);
+    const outerMembrane = new MeshPhysicalMaterial({ color: "#78C69B", roughness: 0.4, transparent: true, opacity: 0.1, depthWrite: false, side: 2 });
+    outerMembrane.userData.forceTransparent = true;
+    outerMembrane.userData.viewMax = 0.1;
+    const innerMembrane = new MeshPhysicalMaterial({ color: "#5FB487", roughness: 0.4, transparent: true, opacity: 0.07, depthWrite: false, side: 2 });
+    innerMembrane.userData.forceTransparent = true;
+    innerMembrane.userData.viewMax = 0.07;
+    const plasmid = new TorusGeometry(1.5, 0.16, 10, 48);
+    const plasmidMat = new MeshStandardMaterial({ color: "#E2B93B", emissive: "#E2B93B", emissiveIntensity: 0.3, roughness: 0.4 });
     const big = lumpy(4.6, 1.3);
     const small = lumpy(3.3, 4.1);
     const bigMat = new MeshPhysicalMaterial({ color: "#C8B7E8", roughness: 0.55, clearcoat: 0.3 });
@@ -119,7 +144,31 @@ export function ExpressionStage() {
     const dotMat = new MeshStandardMaterial({ color: "#2F72E4", emissive: "#2F72E4", emissiveIntensity: 0.4 });
     const atom = new SphereGeometry(1, 12, 8);
     const atomMats = Object.fromEntries(Object.entries(LIGAND_COLORS).map(([k, c]) => [k, new MeshPhysicalMaterial({ color: c, roughness: 0.3, clearcoat: 0.7 })]));
-    return { ribbon, ribbonMat, big, small, bigMat, smallMat, mrnaGeo, mrnaMat, tick, tickMat, bead, beadMat, link, linkMat, dot, dotMat, atom, atomMats };
+    return {
+      ribbon,
+      ribbonMat,
+      envelope,
+      outerMembrane,
+      innerMembrane,
+      plasmid,
+      plasmidMat,
+      big,
+      small,
+      bigMat,
+      smallMat,
+      mrnaGeo,
+      mrnaMat,
+      tick,
+      tickMat,
+      bead,
+      beadMat,
+      link,
+      linkMat,
+      dot,
+      dotMat,
+      atom,
+      atomMats,
+    };
   }, [protein]);
   useEffect(
     () => () => {
@@ -134,34 +183,59 @@ export function ExpressionStage() {
   const iptgSeeds = useMemo(() => Array.from({ length: 26 }, (_, i) => new Vector3(Math.sin(i * 2.4) * 9, 6 + (i % 5) * 1.6, Math.cos(i * 1.7) * 5)), []);
 
   useFrame((state, delta) => {
-    const goal = usePipelineStore.getState().steps.expression;
+    const store = usePipelineStore.getState();
+    const goal = store.steps.expression;
     if (goal === 0) time.current = 0;
     else time.current = Math.min(T_TOTAL, time.current + stageDelta(delta));
-    const t = time.current;
+    // in the flask: pipette the IPTG in, then dive into a cell
+    flask.current.add = goal > 0 && time.current < ADD ? time.current / ADD : 0;
+    store.setSubView("expression", goal > 0 && time.current >= ADD ? "cell" : "flask");
+    const t = Math.max(0, time.current - PRE);
+    // labels wait until the zoom has nearly landed
+    const near = zoom.progress.current > 0.85;
+    if (near !== arrived) setArrived(near);
     const t1 = T.iptg;
     const t2 = t1 + T.tx;
     const t3 = t2 + T.tl;
     const t4 = t3 + T.fold;
-    const nextPhase: Phase = goal === 0 ? "idle" : t < t1 ? "iptg" : t < t2 ? "tx" : t < t3 ? "tl" : t < t4 ? "fold" : t < T_TOTAL ? "bind" : "done";
+    const started = goal !== 0 && time.current >= PRE;
+    const nextPhase: Phase =
+      goal === 0
+        ? "idle"
+        : time.current < ADD
+          ? "add"
+          : time.current < PRE
+            ? "zoom"
+            : t < t1
+              ? "iptg"
+              : t < t2
+                ? "tx"
+                : t < t3
+                  ? "tl"
+                  : t < t4
+                    ? "fold"
+                    : t < T_TOTAL
+                      ? "bind"
+                      : "done";
     if (nextPhase !== phase) setPhase(nextPhase);
 
     // IPTG drifts in
     const im = iptg.current;
     if (im) {
-      const a = goal === 0 ? 0 : smooth(t / t1);
-      const visible = goal !== 0 && t < t2 ? 1 : 0;
+      const a = started ? smooth(t / t1) : 0;
+      const visible = started && t < t2 ? 1 : 0;
       iptgSeeds.forEach((p, i) => im.setMatrixAt(i, tmp.m.compose(tmp.v.copy(p).multiplyScalar(1 - 0.55 * a), tmp.q.identity(), tmp.s.setScalar(visible))));
       im.instanceMatrix.needsUpdate = true;
     }
     // the messenger RNA appears, then slides through the ribosome while it is read
-    const grown = goal === 0 ? 0 : smooth((t - t1) / T.tx);
+    const grown = started ? smooth((t - t1) / T.tx) : 0;
     if (mrna.current) {
       mrna.current.scale.set(Math.max(0.001, grown), 1, 1);
       mrna.current.position.x = -16 * (1 - grown);
     }
     const tm = ticks.current;
     if (tm) {
-      const shift = goal === 0 ? 0 : Math.max(0, Math.min(t, t3) - t2) * 2.2;
+      const shift = started ? Math.max(0, Math.min(t, t3) - t2) * 2.2 : 0;
       for (let i = 0; i < 36; i++) {
         let x = -16 + ((i * 0.9 - shift) % 32.4 + 32.4) % 32.4;
         const show = grown > 0.98 ? 1 : 0;
@@ -175,11 +249,11 @@ export function ExpressionStage() {
     const bm = beads.current;
     const lm = links.current;
     if (!bm || !lm) return;
-    const foldK = goal === 0 ? 0 : smooth((t - t3) / T.fold);
+    const foldK = started ? smooth((t - t3) / T.fold) : 0;
     const pos: Vector3[] = [];
     for (let j = 0; j < chain.n; j++) {
       const born = t2 + (j / chain.n) * T.tl;
-      const age = goal === 0 ? -1 : t - born;
+      const age = started ? t - born : -1;
       const p = new Vector3();
       let scale = 0;
       if (age >= 0) {
@@ -201,16 +275,16 @@ export function ExpressionStage() {
     bm.instanceMatrix.needsUpdate = true;
     if (bm.instanceColor) bm.instanceColor.needsUpdate = true;
     for (let j = 0; j < chain.n - 1; j++) {
-      const both = goal !== 0 && t - (t2 + ((j + 1) / chain.n) * T.tl) >= 0;
+      const both = started && t - (t2 + ((j + 1) / chain.n) * T.tl) >= 0;
       const kras = j >= TAG_KINDS.length;
       lm.setMatrixAt(j, both && (!kras || foldK < 0.98) ? cylinderMatrix(pos[j], pos[j + 1], 0.07 * (kras ? 1 - foldK : 1), tmp.m) : tmp.m.makeScale(0, 0, 0));
     }
     lm.instanceMatrix.needsUpdate = true;
 
     // the real ribbon fades in as the beads fade out, then GDP·Mg²⁺ flies into the pocket
-    setBaseOpacity(res.ribbonMat, foldK);
+    setBaseOpacity(res.ribbonMat, foldK * zoom.progress.current);
     if (folded.current) folded.current.visible = foldK > 0.01;
-    const bindK = goal === 0 ? 0 : smooth((t - t4) / T.bind);
+    const bindK = started ? smooth((t - t4) / T.bind) : 0;
     if (ligands.current) {
       ligands.current.visible = bindK > 0.01;
       ligands.current.position.set(7 * (1 - bindK), 5 * (1 - bindK), 3 * (1 - bindK));
@@ -219,8 +293,10 @@ export function ExpressionStage() {
 
   const centre = CENTRE.toArray() as [number, number, number];
   const phaseLabel: Record<Phase, string> = {
-    idle: "Waiting for the switch: press “Add IPTG”",
-    iptg: "1 · IPTG switches the gene on",
+    idle: "",
+    add: "",
+    zoom: "",
+    iptg: "1 · IPTG enters the cell and switches the gene on",
     tx: "2 · The gene is copied into messenger RNA",
     tl: "3 · The ribosome reads the RNA and links amino acids",
     fold: "4 · The chain folds into KRAS",
@@ -229,49 +305,73 @@ export function ExpressionStage() {
   };
   return (
     <group>
-      <mesh geometry={res.big} material={res.bigMat} position={[0, 2.2, 0]} />
-      <mesh geometry={res.small} material={res.smallMat} position={[0, -4.0, 0.3]} />
-      <mesh ref={mrna} geometry={res.mrnaGeo} material={res.mrnaMat} raycast={() => null} />
-      <instancedMesh ref={ticks} frustumCulled={false} args={[res.tick, res.tickMat, 36]} raycast={() => null} />
-      <instancedMesh ref={iptg} frustumCulled={false} args={[res.dot, res.dotMat, iptgSeeds.length]} raycast={() => null} />
-      <instancedMesh ref={beads} frustumCulled={false} args={[res.bead, res.beadMat, chain.n]} raycast={() => null} />
-      <instancedMesh ref={links} frustumCulled={false} args={[res.link, res.linkMat, chain.n - 1]} raycast={() => null} />
-      <group ref={folded} position={centre} scale={SCALE}>
-        <mesh geometry={res.ribbon.geometry} material={res.ribbonMat} raycast={() => null} />
+      <group ref={zoom.outer}>
+        <Flask state={flask} show={view === "flask"} label={phase === "add" ? "adding IPTG" : "grown culture · ready for IPTG"} />
       </group>
-      <group ref={ligands}>
-        <group position={centre} scale={SCALE}>
-          {protein.ligands.flatMap((l) =>
-            l.atoms.map((a, i) => (
-              <mesh key={`${l.key}-${i}`} geometry={res.atom} material={res.atomMats[a.element] ?? res.atomMats.C} position={a.position} scale={l.atoms.length === 1 ? 0.75 : 0.5} raycast={() => null} />
-            )),
-          )}
+      <group ref={zoom.inner}>
+        <mesh geometry={res.envelope} material={res.outerMembrane} position={CELL_CENTRE} raycast={() => null} />
+        <mesh geometry={res.envelope} material={res.innerMembrane} position={CELL_CENTRE} scale={0.96} raycast={() => null} />
+        <mesh geometry={res.plasmid} material={res.plasmidMat} position={[-19.5, MRNA_Y, 0]} raycast={() => null} />
+        <mesh geometry={res.big} material={res.bigMat} position={[0, 2.2, 0]} />
+        <mesh geometry={res.small} material={res.smallMat} position={[0, -4.0, 0.3]} />
+        <mesh ref={mrna} geometry={res.mrnaGeo} material={res.mrnaMat} raycast={() => null} />
+        <instancedMesh ref={ticks} frustumCulled={false} args={[res.tick, res.tickMat, 36]} raycast={() => null} />
+        <instancedMesh ref={iptg} frustumCulled={false} args={[res.dot, res.dotMat, iptgSeeds.length]} raycast={() => null} />
+        <instancedMesh ref={beads} frustumCulled={false} args={[res.bead, res.beadMat, chain.n]} raycast={() => null} />
+        <instancedMesh ref={links} frustumCulled={false} args={[res.link, res.linkMat, chain.n - 1]} raycast={() => null} />
+        <group ref={folded} position={centre} scale={SCALE}>
+          <mesh geometry={res.ribbon.geometry} material={res.ribbonMat} raycast={() => null} />
+        </group>
+        <group ref={ligands}>
+          <group position={centre} scale={SCALE}>
+            {protein.ligands.flatMap((l) =>
+              l.atoms.map((a, i) => (
+                <mesh key={`${l.key}-${i}`} geometry={res.atom} material={res.atomMats[a.element] ?? res.atomMats.C} position={a.position} scale={l.atoms.length === 1 ? 0.75 : 0.5} raycast={() => null} />
+              )),
+            )}
+          </group>
         </group>
       </group>
-      <SceneLabel position={[0, -8.4, 0]} tone="accent" essential>
-        {phaseLabel[phase]}
-      </SceneLabel>
-      <SceneLabel position={[-11.5, MRNA_Y + 1.2, 0]} tone="muted">
-        messenger RNA
-      </SceneLabel>
-      <SceneLabel position={[6.4, 3.4, 0]}>ribosome</SceneLabel>
-      {phase === "iptg" && (
-        <SceneLabel position={[6.5, 9.5, 0]} essential className="!text-[#1F59C4] dark:!text-[#8DB6FF]">
-          IPTG
-        </SceneLabel>
-      )}
-      {(phase === "tl" || phase === "fold") && (
-        <SceneLabel position={[-4.6, 7.4, 0]} tone="muted" essential>
-          new chain (tag first)
-        </SceneLabel>
-      )}
-      {(phase === "bind" || phase === "done") && (
-        <SceneLabel position={[CENTRE.x + 4.8, CENTRE.y + 2.6, 0]} tone="strong" essential>
-          KRAS · GDP · Mg²⁺
-        </SceneLabel>
+      {view === "cell" && arrived && (
+        <>
+          {phaseLabel[phase] && (
+            <SceneLabel position={[0, -8.4, 0]} tone="accent" essential>
+              {phaseLabel[phase]}
+            </SceneLabel>
+          )}
+          <SceneLabel position={[0, 17.4, 0]} tone="muted" essential>
+            inside one E. coli cell (outline not to scale)
+          </SceneLabel>
+          <SceneLabel position={[-19.5, MRNA_Y + 2.4, 0]} tone="gold">
+            plasmid with the KRAS gene
+          </SceneLabel>
+          <SceneLabel position={[-11.5, MRNA_Y + 1.2, 0]} tone="muted">
+            messenger RNA
+          </SceneLabel>
+          <SceneLabel position={[6.4, 3.4, 0]}>ribosome</SceneLabel>
+          {phase === "iptg" && (
+            <SceneLabel position={[6.5, 9.5, 0]} essential className="!text-[#1F59C4] dark:!text-[#8DB6FF]">
+              IPTG
+            </SceneLabel>
+          )}
+          {(phase === "tl" || phase === "fold") && (
+            <SceneLabel position={[-4.6, 7.4, 0]} tone="muted" essential>
+              new chain (tag first)
+            </SceneLabel>
+          )}
+          {(phase === "bind" || phase === "done") && (
+            <SceneLabel position={[CENTRE.x + 4.8, CENTRE.y + 2.6, 0]} tone="strong" essential>
+              KRAS · GDP · Mg²⁺
+            </SceneLabel>
+          )}
+        </>
       )}
     </group>
   );
 }
 
-export const expressionFraming = () => framing([0, 2.6, 0], 13, [0.15, 0.2, 1]);
+export const expressionFraming = () => {
+  const { steps, subViews } = usePipelineStore.getState();
+  if ((subViews.expression ?? (steps.expression > 0 ? "cell" : "flask")) === "flask") return framing([0, 1.2, 0], 4.8, [0.12, 0.42, 1]);
+  return framing([0, 3.2, 0], 15.5, [0.15, 0.2, 1]);
+};
